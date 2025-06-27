@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "install": "cd river-crossing-puzzle && npm install",
-    "build": "cd river-crossing-puzzle && npm run build",
+    "start": "cd river-crossing-puzzle && npm start",
+    "build": "cd river-crossing-puzzle && npm install && npm run build",
+    "test": "cd river-crossing-puzzle && npm test",
     "deploy": "npm run build && npx wrangler deploy --assets=./river-crossing-puzzle/build"
   },
   "devDependencies": {

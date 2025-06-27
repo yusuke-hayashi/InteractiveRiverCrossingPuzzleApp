@@ -1,7 +1,5 @@
 {
   "name": "river-crossing-puzzle",
   "compatibility_date": "2025-06-27",
-  "assets": {
-    "directory": "./river-crossing-puzzle/build"
-  }
+  "pages_build_output_dir": "./river-crossing-puzzle/build"
 }
