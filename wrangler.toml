@@ -1,0 +1,4 @@
+name = "river-crossing-puzzle"
+compatibility_date = "2025-06-27"
+
+pages_build_output_dir = "./river-crossing-puzzle/build"

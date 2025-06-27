@@ -1,0 +1,13 @@
+{
+  "name": "river-crossing-puzzle-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install": "cd river-crossing-puzzle && npm install",
+    "build": "cd river-crossing-puzzle && npm run build",
+    "deploy": "npm run build && npx wrangler deploy --assets=./river-crossing-puzzle/build"
+  },
+  "devDependencies": {
+    "wrangler": "^4.22.0"
+  }
+}

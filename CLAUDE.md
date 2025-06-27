@@ -3,6 +3,16 @@
 # 最重要！
 日本語で答えて
 
+## 🔨 最重要ルール - 新しいルールの追加プロセス
+
+ユーザーから今回限りではなく常に対応が必要だと思われる指示を受けた場合：
+
+1. 「これを標準のルールにしますか？」と質問する
+2. YESの回答を得た場合、CLAUDE.mdに追加ルールとして記載する
+3. 以降は標準ルールとして常に適用する
+
+このプロセスにより、プロジェクトのルールを継続的に改善していきます。
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
