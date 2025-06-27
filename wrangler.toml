@@ -1,4 +1,8 @@
 name = "river-crossing-puzzle"
 compatibility_date = "2025-06-27"
 
+[build]
+command = "npm run build"
+cwd = "."
+
 pages_build_output_dir = "./river-crossing-puzzle/build"
