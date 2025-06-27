@@ -266,18 +266,6 @@ function App() {
 
     const newState = { ...gameState, error: '', warning: '' };
     
-    // 船がいる側からのみ乗船可能
-    const currentSide = newState.boatSide === 'left' ? newState.leftSide : newState.rightSide;
-    if (!currentSide.includes(item)) {
-      newState.warning = '船がいる側からしか乗船できません！';
-      setGameState(newState);
-      // 2秒後に警告を消す
-      setTimeout(() => {
-        setGameState(prev => ({ ...prev, warning: '' }));
-      }, 2000);
-      return;
-    }
-
     let operation = '';
     let operationTarget = items[item]?.name;
 
@@ -285,11 +273,35 @@ function App() {
       // 船から降ろす
       operation = '降ろす';
       newState.boat = newState.boat.filter(i => i !== item);
+      
+      // 船がいる側に戻す
+      if (newState.boatSide === 'left') {
+        if (!newState.leftSide.includes(item)) {
+          newState.leftSide.push(item);
+        }
+      } else {
+        if (!newState.rightSide.includes(item)) {
+          newState.rightSide.push(item);
+        }
+      }
+      
       // アイテムを降ろす時、船頭以外に誰もいなければ船頭も降ろす
       if (newState.boat.filter(i => i !== 'farmer').length === 0) {
         newState.boat = newState.boat.filter(i => i !== 'farmer');
       }
     } else {
+      // 船がいる側からのみ乗船可能チェック
+      const currentSide = newState.boatSide === 'left' ? newState.leftSide : newState.rightSide;
+      if (!currentSide.includes(item)) {
+        newState.warning = '船がいる側からしか乗船できません！';
+        setGameState(newState);
+        // 2秒後に警告を消す
+        setTimeout(() => {
+          setGameState(prev => ({ ...prev, warning: '' }));
+        }, 2000);
+        return;
+      }
+      
       // 船に乗せる
       const nonFarmerItems = newState.boat.filter(i => i !== 'farmer');
       if (nonFarmerItems.length >= 1) {
@@ -303,6 +315,14 @@ function App() {
       }
       
       operation = '乗せる';
+      
+      // 岸からアイテムを削除
+      if (newState.boatSide === 'left') {
+        newState.leftSide = newState.leftSide.filter(i => i !== item);
+      } else {
+        newState.rightSide = newState.rightSide.filter(i => i !== item);
+      }
+      
       // アイテムを船に乗せる時、船頭も自動的に乗せる
       if (!newState.boat.includes('farmer')) {
         newState.boat.push('farmer');
@@ -332,17 +352,17 @@ function App() {
     const newState = { ...gameState, error: '', warning: '', moves: gameState.moves + 1 };
     
     // 船の乗客を対岸に移動（船頭以外）
-    gameState.boat.filter(item => item !== 'farmer').forEach(item => {
+    const passengersToMove = gameState.boat.filter(item => item !== 'farmer');
+    
+    passengersToMove.forEach(item => {
       if (newState.boatSide === 'left') {
+        // 左岸から右岸へ移動
         newState.leftSide = newState.leftSide.filter(i => i !== item);
-        if (!newState.rightSide.includes(item)) {
-          newState.rightSide.push(item);
-        }
+        newState.rightSide.push(item);
       } else {
+        // 右岸から左岸へ移動
         newState.rightSide = newState.rightSide.filter(i => i !== item);
-        if (!newState.leftSide.includes(item)) {
-          newState.leftSide.push(item);
-        }
+        newState.leftSide.push(item);
       }
     });
 
@@ -878,6 +898,21 @@ function App() {
             ).length}件記録中
           </p>
         )}
+        <div style={{ marginTop: '16px', textAlign: 'center' }}>
+          <button
+            onClick={() => window.location.href = '/admin/login'}
+            style={{
+              color: '#6b7280',
+              fontSize: '12px',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              textDecoration: 'underline'
+            }}
+          >
+            📊 管理者分析ページ
+          </button>
+        </div>
       </div>
 
       {/* CSVモーダル */}

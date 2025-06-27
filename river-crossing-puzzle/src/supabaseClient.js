@@ -257,3 +257,334 @@ export const getSessionStatistics = async (userId) => {
     return { success: false, error }
   }
 }
+
+// 分析ツール用関数
+
+// 全体統計情報を取得
+export const getOverallStatistics = async (dateRange = null) => {
+  try {
+    let query = supabase.from('game_logs').select('*')
+    
+    if (dateRange) {
+      query = query.gte('timestamp', dateRange.start).lte('timestamp', dateRange.end)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('全体統計取得エラー:', error)
+      return { success: false, error }
+    }
+
+    // ユニークユーザー数
+    const uniqueUsers = [...new Set(data.map(log => log.user_id))]
+    
+    // デバッグ用ログ
+    console.log('全データ数:', data.length)
+    console.log('データサンプル:', data.slice(0, 3))
+    
+    // ゲーム完了したユーザーを取得（game_completedがtrueのログから）
+    const gameCompletedLogs = data.filter(log => 
+      log.game_completed === true && log.operation === 'ゲーム完了'
+    )
+    console.log('ゲーム完了ログ数:', gameCompletedLogs.length)
+    
+    // セッション開始ログを取得
+    const sessionStartLogs = data.filter(log => log.operation === 'セッション開始')
+    console.log('セッション開始ログ数:', sessionStartLogs.length)
+    
+    // ユニークなセッションを取得（user_idとsession_numberの組み合わせ）
+    const uniqueSessions = {}
+    data.forEach(log => {
+      const sessionKey = `${log.user_id}_${log.session_number}`
+      if (!uniqueSessions[sessionKey]) {
+        uniqueSessions[sessionKey] = {
+          user_id: log.user_id,
+          session_number: log.session_number,
+          has_completed: false,
+          has_constraint_violation: false,
+          logs: []
+        }
+      }
+      uniqueSessions[sessionKey].logs.push(log)
+      
+      // ゲーム完了フラグをチェック
+      if (log.game_completed === true && log.operation === 'ゲーム完了') {
+        uniqueSessions[sessionKey].has_completed = true
+      }
+      
+      // 制約違反フラグをチェック
+      if (log.operation === '制約違反') {
+        uniqueSessions[sessionKey].has_constraint_violation = true
+      }
+    })
+    
+    // 成功セッションと失敗セッションをカウント
+    let completedSessionsCount = 0
+    let failedSessionsCount = 0
+    
+    Object.values(uniqueSessions).forEach(session => {
+      if (session.has_completed) {
+        completedSessionsCount++
+      } else if (session.has_constraint_violation) {
+        failedSessionsCount++
+      }
+    })
+    
+    console.log('完了セッション数:', completedSessionsCount)
+    console.log('失敗セッション数:', failedSessionsCount)
+
+    // 制約違反の分析（失敗したゲームログから）
+    const violations = { catRabbit: 0, rabbitVegetable: 0 }
+    const failedGameLogs = data.filter(log => log.session_status === 'failed')
+    failedGameLogs.forEach(session => {
+      // エラーメッセージから制約違反の種類を判定
+      if (session.operation && session.operation.includes('移動') && session.target) {
+        // 実際の制約違反はApp.jsのcheckConstraints関数で判定される
+        // ここでは簡易的に判定
+        violations.catRabbit++
+      }
+    })
+
+    // 解けた人数（ゲーム完了したユニークユーザー）
+    const solvedUsers = [...new Set(gameCompletedLogs.map(log => log.user_id))]
+
+    // 正解までの平均セッション数を計算
+    let avgSessionsUntilClear = 0
+    if (solvedUsers.length > 0) {
+      // 各解けたユーザーの初回クリアまでのセッション数を取得
+      const sessionsUntilClearList = []
+      
+      solvedUsers.forEach(userId => {
+        const userLogs = data.filter(log => log.user_id === userId)
+        
+        // セッション別にグループ化
+        const sessionGroups = {}
+        userLogs.forEach(log => {
+          if (!sessionGroups[log.session_number]) {
+            sessionGroups[log.session_number] = []
+          }
+          sessionGroups[log.session_number].push(log)
+        })
+
+        // 初回クリアセッションを探す
+        let firstClearSession = null
+        Object.keys(sessionGroups).sort((a, b) => a - b).forEach(sessionNum => {
+          const session = sessionGroups[sessionNum]
+          const isCompleted = session.some(log => log.game_completed === true && log.operation === 'ゲーム完了')
+          
+          if (!firstClearSession && isCompleted) {
+            firstClearSession = parseInt(sessionNum)
+          }
+        })
+
+        if (firstClearSession) {
+          sessionsUntilClearList.push(firstClearSession)
+        }
+      })
+
+      // 平均を計算
+      if (sessionsUntilClearList.length > 0) {
+        const sum = sessionsUntilClearList.reduce((acc, val) => acc + val, 0)
+        avgSessionsUntilClear = sum / sessionsUntilClearList.length
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        totalUsers: uniqueUsers.length,
+        solvedUsers: solvedUsers.length,
+        totalSessions: Object.keys(uniqueSessions).length,
+        completedSessions: completedSessionsCount,
+        failedSessions: failedSessionsCount,
+        avgSessionsUntilClear: avgSessionsUntilClear,
+        violations
+      }
+    }
+  } catch (error) {
+    console.error('全体統計取得中にエラー:', error)
+    return { success: false, error }
+  }
+}
+
+// ユーザー別統計の詳細を取得
+export const getUserDetailedStatistics = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from('game_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('timestamp', { ascending: true })
+
+    if (error) {
+      console.error('ユーザー詳細統計取得エラー:', error)
+      return { success: false, error }
+    }
+
+    // セッション別にグループ化
+    const sessionGroups = {}
+    data.forEach(log => {
+      if (!sessionGroups[log.session_number]) {
+        sessionGroups[log.session_number] = []
+      }
+      sessionGroups[log.session_number].push(log)
+    })
+
+    // 初回クリアまでのセッション数（ゲーム完了したセッションから判定）
+    let firstClearSession = null
+    Object.keys(sessionGroups).sort((a, b) => a - b).forEach(sessionNum => {
+      const session = sessionGroups[sessionNum]
+      const isCompleted = session.some(log => log.game_completed === true && log.operation === 'ゲーム完了')
+      if (!firstClearSession && isCompleted) {
+        firstClearSession = parseInt(sessionNum)
+      }
+    })
+
+    // 最小手数（ゲーム完了したセッションから）
+    const completedSessionLogs = Object.values(sessionGroups).filter(session => 
+      session.some(log => log.game_completed === true && log.operation === 'ゲーム完了')
+    )
+    
+    let minMoves = null
+    if (completedSessionLogs.length > 0) {
+      const movesCounts = completedSessionLogs.map(session => {
+        const gameCompletedLog = session.find(log => log.game_completed === true && log.operation === 'ゲーム完了')
+        return gameCompletedLog ? gameCompletedLog.moves_count : 0
+      }).filter(moves => moves > 0)
+      
+      if (movesCounts.length > 0) {
+        minMoves = Math.min(...movesCounts)
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        sessionsUntilFirstClear: firstClearSession || 0,
+        minMoves,
+        totalSessions: Object.keys(sessionGroups).length,
+        sessionDetails: sessionGroups
+      }
+    }
+  } catch (error) {
+    console.error('ユーザー詳細統計取得中にエラー:', error)
+    return { success: false, error }
+  }
+}
+
+// ランキングデータを取得（初回クリアまでのセッション数）
+export const getRankingData = async (type = 'sessions', limit = 10) => {
+  try {
+    // 全ユーザーのデータを取得
+    const { data, error } = await supabase
+      .from('game_logs')
+      .select('*')
+      .order('user_id', { ascending: true })
+      .order('session_number', { ascending: true })
+
+    if (error) {
+      console.error('ランキングデータ取得エラー:', error)
+      return { success: false, error }
+    }
+
+    // ユーザーごとに初回クリアまでのセッション数を計算
+    const userFirstClearSessions = {}
+    
+    // ユーザー別にデータをグループ化
+    const userDataGroups = {}
+    data.forEach(log => {
+      if (!userDataGroups[log.user_id]) {
+        userDataGroups[log.user_id] = []
+      }
+      userDataGroups[log.user_id].push(log)
+    })
+
+    // 各ユーザーの初回クリアまでのセッション数を計算
+    Object.keys(userDataGroups).forEach(userId => {
+      const userLogs = userDataGroups[userId]
+      
+      // セッション別にグループ化
+      const sessionGroups = {}
+      userLogs.forEach(log => {
+        if (!sessionGroups[log.session_number]) {
+          sessionGroups[log.session_number] = []
+        }
+        sessionGroups[log.session_number].push(log)
+      })
+
+      // 初回クリアセッションを探す
+      let firstClearSession = null
+      let firstClearTimestamp = null
+      
+      Object.keys(sessionGroups).sort((a, b) => a - b).forEach(sessionNum => {
+        const session = sessionGroups[sessionNum]
+        const isCompleted = session.some(log => log.game_completed === true && log.operation === 'ゲーム完了')
+        
+        if (!firstClearSession && isCompleted) {
+          firstClearSession = parseInt(sessionNum)
+          const gameCompletedLog = session.find(log => log.game_completed === true && log.operation === 'ゲーム完了')
+          firstClearTimestamp = gameCompletedLog ? gameCompletedLog.timestamp : null
+        }
+      })
+
+      // 初回クリアした場合のみランキングに追加
+      if (firstClearSession) {
+        userFirstClearSessions[userId] = {
+          user_id: userId,
+          sessions_until_first_clear: firstClearSession,
+          timestamp: firstClearTimestamp,
+          session_number: firstClearSession
+        }
+      }
+    })
+
+    const ranking = Object.values(userFirstClearSessions)
+      .sort((a, b) => a.sessions_until_first_clear - b.sessions_until_first_clear)
+      .slice(0, limit)
+
+    return {
+      success: true,
+      data: ranking
+    }
+  } catch (error) {
+    console.error('ランキングデータ取得中にエラー:', error)
+    return { success: false, error }
+  }
+}
+
+// 全ユーザーのリストを取得
+export const getAllUsers = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('game_logs')
+      .select('user_id')
+      .neq('user_id', '')
+
+    if (error) {
+      console.error('ユーザーリスト取得エラー:', error)
+      return { success: false, error }
+    }
+
+    const uniqueUsers = [...new Set(data.map(log => log.user_id))]
+    return { success: true, data: uniqueUsers }
+  } catch (error) {
+    console.error('ユーザーリスト取得中にエラー:', error)
+    return { success: false, error }
+  }
+}
+
+// リアルタイム更新のサブスクリプション
+export const subscribeToGameLogs = (callback) => {
+  const subscription = supabase
+    .channel('game_logs_changes')
+    .on('postgres_changes', 
+      { event: '*', schema: 'public', table: 'game_logs' },
+      (payload) => {
+        callback(payload)
+      }
+    )
+    .subscribe()
+
+  return subscription
+}
