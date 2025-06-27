@@ -7,6 +7,3 @@ cwd = "."
 
 [env.production]
 pages_build_output_dir = "./river-crossing-puzzle/build"
-
-[[assets]]
-bucket = "./river-crossing-puzzle/build"
