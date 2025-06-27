@@ -1,10 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { 
+  saveGameLog, 
+  getLatestSessionNumber, 
+  startNewSession, 
+  updateSessionStatus 
+} from './supabaseClient';
 
 function App() {
   // ユーザーID管理
   const [userId, setUserId] = useState('');
   const [showUserIdModal, setShowUserIdModal] = useState(true);
   const [tempUserId, setTempUserId] = useState('');
+  
+  // ゲームセッションID（ゲーム開始時に生成）
+  const gameSessionId = useRef(null);
+  
+  // セッション管理
+  const currentSessionNumber = useRef(null);
+  const sessionStartTime = useRef(null);
 
   // 初期状態：すべて左岸にいる（船頭は船と一緒）
   const [gameState, setGameState] = useState({
@@ -28,20 +41,50 @@ function App() {
   };
 
   // ユーザーID入力処理
-  const handleUserIdSubmit = () => {
+  const handleUserIdSubmit = async () => {
     const trimmedId = tempUserId.trim();
     if (trimmedId) {
       setUserId(trimmedId);
       setShowUserIdModal(false);
+      
+      // 新しいセッションを開始
+      await initializeNewSession(trimmedId);
     } else {
       alert('ユーザーIDを入力してください。');
     }
   };
 
-  // ログエントリを作成するヘルパー関数
-  const createLogEntry = (operationNum, operation, target, leftSide, rightSide, boat) => {
+  // 新しいセッションを初期化
+  const initializeNewSession = async (userId) => {
+    try {
+      // 最新のセッション番号を取得
+      const result = await getLatestSessionNumber(userId);
+      if (!result.success) {
+        console.error('セッション番号取得失敗:', result.error);
+        return;
+      }
+
+      const newSessionNumber = result.data + 1;
+      currentSessionNumber.current = newSessionNumber;
+
+      // 新しいセッションを開始
+      const sessionResult = await startNewSession(userId, newSessionNumber);
+      if (sessionResult.success) {
+        sessionStartTime.current = sessionResult.sessionStartTime;
+        gameSessionId.current = crypto.randomUUID();
+        console.log(`セッション ${newSessionNumber} を開始しました`);
+      } else {
+        console.error('セッション開始失敗:', sessionResult.error);
+      }
+    } catch (error) {
+      console.error('セッション初期化エラー:', error);
+    }
+  };
+
+  // ログエントリを作成し、Supabaseに保存するヘルパー関数
+  const createLogEntry = async (operationNum, operation, target, leftSide, rightSide, boat, moves = 0, gameCompleted = false) => {
     const timestamp = new Date().toISOString();
-    return {
+    const logEntry = {
       ユーザーID: userId,
       タイムスタンプ: timestamp,
       操作番号: operationNum,
@@ -53,36 +96,146 @@ function App() {
       右岸_ネコ: rightSide.includes('cat') ? 1 : 0,
       右岸_ウサギ: rightSide.includes('rabbit') ? 1 : 0,
       右岸_野菜: rightSide.includes('vegetable') ? 1 : 0,
-      船の積み荷: boat.filter(item => item !== 'farmer').map(item => items[item]?.name).join('、') || 'なし'
+      船の積み荷: boat.filter(item => item !== 'farmer').map(item => items[item]?.name).join('、') || 'なし',
+      ゲームセッションID: gameSessionId.current,
+      手数: moves,
+      ゲーム完了: gameCompleted,
+      セッション番号: currentSessionNumber.current,
+      セッション開始時刻: sessionStartTime.current
     };
+
+    // Supabaseにログを保存
+    try {
+      const result = await saveGameLog(logEntry);
+      if (!result.success) {
+        console.error('Supabaseログ保存失敗:', result.error);
+      }
+    } catch (error) {
+      console.error('ログ保存中にエラー:', error);
+    }
+
+    return logEntry;
   };
 
   // CSV表示機能
   const showCSV = () => setGameState(prev => ({ ...prev, showCSV: true }));
   const closeCSV = () => setGameState(prev => ({ ...prev, showCSV: false }));
+  
+  // CSVをクリップボードにコピー（フォールバック機能）
+  const copyCSVToClipboard = async () => {
+    try {
+      const csvContent = generateCSV();
+      await navigator.clipboard.writeText(csvContent);
+      alert('CSVデータをクリップボードにコピーしました！テキストエディタに貼り付けてファイルとして保存してください。');
+    } catch (error) {
+      alert('クリップボードへのコピーに失敗しました。');
+    }
+  };
 
   const generateCSV = () => {
     const headers = [
-      'ユーザーID', 'タイムスタンプ', '操作番号', '操作', '対象', '左岸_ネコ', '左岸_ウサギ', '左岸_野菜', 
-      '右岸_ネコ', '右岸_ウサギ', '右岸_野菜', '船の積み荷'
+      'user_id', 'timestamp', 'operation_number', 'operation', 'target', 
+      'left_cat', 'left_rabbit', 'left_vegetable', 
+      'right_cat', 'right_rabbit', 'right_vegetable', 
+      'boat_cargo', 'game_session_id', 'moves_count', 'game_completed',
+      'session_number', 'session_status', 'session_start_time', 'session_end_time'
     ];
+    
+    // 現在のセッションのログのみをフィルタリング
+    const currentSessionLogs = gameState.operationLog.filter(entry => 
+      entry.セッション番号 === currentSessionNumber.current
+    );
+    
+    // ログが空の場合はヘッダーのみ
+    if (currentSessionLogs.length === 0) {
+      return headers.join(',');
+    }
     
     const csvContent = [
       headers.join(','),
-      ...gameState.operationLog.map(entry => 
-        headers.map(header => `"${entry[header]}"`).join(',')
-      )
+      ...currentSessionLogs.map(entry => {
+        // データベースのカラム名に対応するマッピング
+        const row = [
+          entry.ユーザーID || '',
+          entry.タイムスタンプ || '',
+          entry.操作番号 || '',
+          entry.操作 || '',
+          entry.対象 || '',
+          entry.左岸_ネコ || 0,
+          entry.左岸_ウサギ || 0,
+          entry.左岸_野菜 || 0,
+          entry.右岸_ネコ || 0,
+          entry.右岸_ウサギ || 0,
+          entry.右岸_野菜 || 0,
+          entry.船の積み荷 || '',
+          entry.ゲームセッションID || '',
+          entry.手数 || 0,
+          entry.ゲーム完了 ? 'true' : 'false',
+          entry.セッション番号 || '',
+          'active', // デフォルト値（実際の状態はデータベースで管理）
+          entry.セッション開始時刻 || '',
+          '' // セッション終了時刻は進行中の場合は空
+        ];
+        return row.map(value => `"${value}"`).join(',');
+      })
     ].join('\n');
 
     return csvContent;
   };
 
-  const copyToClipboard = async () => {
+  const downloadCSV = () => {
     try {
-      await navigator.clipboard.writeText(generateCSV());
-      alert('CSVデータがクリップボードにコピーされました！');
-    } catch (err) {
-      alert('コピーに失敗しました。テキストエリアから手動でコピーしてください。');
+      // 基本的な状態チェック
+      if (!userId) {
+        alert('ユーザーIDが設定されていません。');
+        return;
+      }
+      
+      if (!currentSessionNumber.current) {
+        alert('セッションが開始されていません。');
+        return;
+      }
+      
+      // 現在のセッションのログをチェック
+      const currentSessionLogs = gameState.operationLog.filter(entry => 
+        entry.セッション番号 === currentSessionNumber.current
+      );
+      
+      if (currentSessionLogs.length === 0) {
+        alert('このセッションには操作ログがありません。何か操作を行ってから再度お試しください。');
+        return;
+      }
+      
+      // CSV内容を生成
+      const csvContent = generateCSV();
+      
+      if (!csvContent) {
+        alert('CSVデータの生成に失敗しました。');
+        return;
+      }
+      
+      // ファイル名を生成
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+      const fileName = `river-crossing-puzzle_${userId}_session${currentSessionNumber.current}_${timestamp}.csv`;
+      
+      // シンプルなダウンロード方法を使用
+      const element = document.createElement('a');
+      const file = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8' });
+      element.href = URL.createObjectURL(file);
+      element.download = fileName;
+      
+      // 一時的にページに追加してクリック
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+      
+      // メモリクリーンアップ
+      URL.revokeObjectURL(element.href);
+      
+      alert(`CSVファイル「${fileName}」をダウンロードしました！`);
+      
+    } catch (error) {
+      alert('CSVダウンロード中にエラーが発生しました: ' + error.message);
     }
   };
 
@@ -107,7 +260,7 @@ function App() {
   };
 
   // アイテムを船に乗せる/降ろす
-  const toggleItem = (item) => {
+  const toggleItem = async (item) => {
     if (gameState.gameWon || gameState.error) return;
     if (item === 'farmer') return; // 船頭は手動選択不可
 
@@ -157,14 +310,15 @@ function App() {
       newState.boat.push(item);
     }
 
-    // ログエントリを追加
-    const logEntry = createLogEntry(
+    // ログエントリを追加（Supabaseに保存）
+    const logEntry = await createLogEntry(
       newState.operationLog.length + 1,
       operation,
       operationTarget,
       newState.leftSide,
       newState.rightSide,
-      newState.boat
+      newState.boat,
+      newState.moves
     );
     newState.operationLog = [...newState.operationLog, logEntry];
     
@@ -172,7 +326,7 @@ function App() {
   };
 
   // 船を移動
-  const moveBoat = () => {
+  const moveBoat = async () => {
     if (gameState.gameWon || gameState.error) return;
 
     const newState = { ...gameState, error: '', warning: '', moves: gameState.moves + 1 };
@@ -197,14 +351,15 @@ function App() {
     newState.boatSide = newState.boatSide === 'left' ? 'right' : 'left';
     newState.boat = [];
 
-    // 移動操作をログに記録
-    const logEntry = createLogEntry(
+    // 移動操作をログに記録（Supabaseに保存）
+    const logEntry = await createLogEntry(
       newState.operationLog.length + 1,
       '移動',
       targetSide,
       newState.leftSide,
       newState.rightSide,
-      newState.boat
+      newState.boat,
+      newState.moves
     );
     newState.operationLog = [...newState.operationLog, logEntry];
 
@@ -214,6 +369,10 @@ function App() {
     
     if (leftError || rightError) {
       const errorMessage = leftError || rightError;
+      // セッションを失敗状態に更新
+      const endTime = new Date().toISOString();
+      await updateSessionStatus(userId, currentSessionNumber.current, 'failed', endTime);
+      
       setGameState({ ...gameState, error: errorMessage });
       return;
     }
@@ -221,13 +380,38 @@ function App() {
     // 勝利条件チェック
     if (newState.rightSide.length === 3) {
       newState.gameWon = true;
+      
+      // セッションを完了状態に更新
+      const endTime = new Date().toISOString();
+      await updateSessionStatus(userId, currentSessionNumber.current, 'completed', endTime);
+      
+      // 勝利ログを保存
+      await createLogEntry(
+        newState.operationLog.length + 1,
+        'ゲーム完了',
+        `${newState.moves}手でクリア`,
+        newState.leftSide,
+        newState.rightSide,
+        newState.boat,
+        newState.moves,
+        true
+      );
     }
 
     setGameState(newState);
   };
 
   // リセット
-  const resetGame = () => {
+  const resetGame = async () => {
+    // 現在のセッションが進行中の場合、中断状態に更新
+    if (currentSessionNumber.current) {
+      const endTime = new Date().toISOString();
+      await updateSessionStatus(userId, currentSessionNumber.current, 'abandoned', endTime);
+    }
+    
+    // 新しいセッションを開始
+    await initializeNewSession(userId);
+    
     setGameState({
       leftSide: ['cat', 'rabbit', 'vegetable'],
       rightSide: [],
@@ -347,7 +531,14 @@ function App() {
           船には1個まで（船頭は常に同乗） | 
           船頭がいないと：ネコ↔ウサギ ❌、ウサギ↔野菜 ❌
         </p>
-        <p style={{ color: '#2563eb' }}>手数: {gameState.moves}</p>
+        <div style={{ color: '#2563eb', display: 'flex', justifyContent: 'center', gap: '24px', alignItems: 'center' }}>
+          <span>手数: {gameState.moves}</span>
+          {currentSessionNumber.current && (
+            <span style={{ fontSize: '14px', color: '#6b7280' }}>
+              第{currentSessionNumber.current}回チャレンジ
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 固定メッセージスペース */}
@@ -430,7 +621,7 @@ function App() {
                   cursor: 'pointer'
                 }}
               >
-                📊 操作ログを表示
+                📥 CSVダウンロード
               </button>
             </div>
           )}
@@ -662,7 +853,9 @@ function App() {
           >
             リセット
           </button>
-          {gameState.operationLog.length > 0 && !gameState.gameWon && (
+          {gameState.operationLog.filter(entry => 
+            entry.セッション番号 === currentSessionNumber.current
+          ).length > 0 && !gameState.gameWon && (
             <button
               onClick={showCSV}
               style={{
@@ -674,13 +867,15 @@ function App() {
                 cursor: 'pointer'
               }}
             >
-              📊 途中経過ログを表示
+              📥 途中経過をCSVダウンロード
             </button>
           )}
         </div>
         {gameState.operationLog.length > 0 && (
           <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>
-            操作ログ: {gameState.operationLog.length}件記録中
+            このセッションの操作ログ: {gameState.operationLog.filter(entry => 
+              entry.セッション番号 === currentSessionNumber.current
+            ).length}件記録中
           </p>
         )}
       </div>
@@ -702,15 +897,14 @@ function App() {
           <div style={{
             backgroundColor: 'white',
             borderRadius: '8px',
-            padding: '24px',
-            maxWidth: '800px',
-            width: '100%',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%',
             margin: '16px',
-            maxHeight: '600px',
-            overflow: 'hidden'
+            boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>📊 操作ログ（CSV形式）</h3>
+              <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>📥 CSVダウンロード</h3>
               <button
                 onClick={closeCSV}
                 style={{
@@ -724,45 +918,52 @@ function App() {
                 ✕
               </button>
             </div>
-            <div style={{ marginBottom: '16px' }}>
-              <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '8px' }}>
-                以下のCSVデータをコピーして、テキストファイルとして保存できます：
+            <div style={{ marginBottom: '24px', textAlign: 'center' }}>
+              <p style={{ fontSize: '16px', color: '#374151', marginBottom: '16px' }}>
+                現在のセッション（第{currentSessionNumber.current}回チャレンジ）の操作ログをCSVファイルでダウンロードできます。
               </p>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+              <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '20px' }}>
+                ファイル名: river-crossing-puzzle_{userId}_session{currentSessionNumber.current}_[タイムスタンプ].csv
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
                 <button
-                  onClick={copyToClipboard}
+                  onClick={downloadCSV}
                   style={{
-                    padding: '4px 12px',
-                    backgroundColor: '#3b82f6',
+                    padding: '12px 24px',
+                    backgroundColor: '#059669',
                     color: 'white',
-                    fontSize: '12px',
-                    borderRadius: '4px',
+                    fontSize: '16px',
+                    borderRadius: '8px',
                     border: 'none',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
                   }}
                 >
-                  📋 クリップボードにコピー
+                  📥 CSVファイルをダウンロード
                 </button>
-                <span style={{ fontSize: '12px', color: '#6b7280' }}>
-                  ファイル名例: 川渡り問題_{userId}_{gameState.moves}手.csv
-                </span>
+                
+                <button
+                  onClick={copyCSVToClipboard}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    fontSize: '14px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  📋 クリップボードにコピー（代替方法）
+                </button>
               </div>
             </div>
-            <textarea
-              value={generateCSV()}
-              readOnly
-              onClick={(e) => e.target.select()}
-              style={{
-                width: '100%',
-                height: '300px',
-                padding: '12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '4px',
-                fontSize: '12px',
-                fontFamily: 'monospace',
-                resize: 'none'
-              }}
-            />
             <div style={{ marginTop: '16px', textAlign: 'center' }}>
               <button
                 onClick={closeCSV}
