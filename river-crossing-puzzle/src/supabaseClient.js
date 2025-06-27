@@ -289,50 +289,44 @@ export const getOverallStatistics = async (dateRange = null) => {
     )
     console.log('ゲーム完了ログ数:', gameCompletedLogs.length)
     
-    // セッション開始ログを取得
+    // セッション開始ログを取得してステータス別にカウント
     const sessionStartLogs = data.filter(log => log.operation === 'セッション開始')
     console.log('セッション開始ログ数:', sessionStartLogs.length)
     
-    // ユニークなセッションを取得（user_idとsession_numberの組み合わせ）
-    const uniqueSessions = {}
-    data.forEach(log => {
+    // セッションごとのステータスを取得
+    const sessionStatusMap = {}
+    sessionStartLogs.forEach(log => {
       const sessionKey = `${log.user_id}_${log.session_number}`
-      if (!uniqueSessions[sessionKey]) {
-        uniqueSessions[sessionKey] = {
-          user_id: log.user_id,
-          session_number: log.session_number,
-          has_completed: false,
-          has_constraint_violation: false,
-          logs: []
-        }
-      }
-      uniqueSessions[sessionKey].logs.push(log)
-      
-      // ゲーム完了フラグをチェック
-      if (log.game_completed === true && log.operation === 'ゲーム完了') {
-        uniqueSessions[sessionKey].has_completed = true
-      }
-      
-      // 制約違反フラグをチェック
-      if (log.operation === '制約違反') {
-        uniqueSessions[sessionKey].has_constraint_violation = true
-      }
+      sessionStatusMap[sessionKey] = log.session_status
     })
     
-    // 成功セッションと失敗セッションをカウント
+    // ステータス別にカウント
     let completedSessionsCount = 0
     let failedSessionsCount = 0
+    let activeSessionsCount = 0
+    let abandonedSessionsCount = 0
     
-    Object.values(uniqueSessions).forEach(session => {
-      if (session.has_completed) {
-        completedSessionsCount++
-      } else if (session.has_constraint_violation) {
-        failedSessionsCount++
+    Object.values(sessionStatusMap).forEach(status => {
+      switch(status) {
+        case 'completed':
+          completedSessionsCount++
+          break
+        case 'failed':
+          failedSessionsCount++
+          break
+        case 'active':
+          activeSessionsCount++
+          break
+        case 'abandoned':
+          abandonedSessionsCount++
+          break
       }
     })
     
     console.log('完了セッション数:', completedSessionsCount)
     console.log('失敗セッション数:', failedSessionsCount)
+    console.log('アクティブセッション数:', activeSessionsCount)
+    console.log('放棄セッション数:', abandonedSessionsCount)
 
     // 制約違反の分析（失敗したゲームログから）
     const violations = { catRabbit: 0, rabbitVegetable: 0 }
@@ -395,7 +389,7 @@ export const getOverallStatistics = async (dateRange = null) => {
       data: {
         totalUsers: uniqueUsers.length,
         solvedUsers: solvedUsers.length,
-        totalSessions: Object.keys(uniqueSessions).length,
+        totalSessions: sessionStartLogs.length,
         completedSessions: completedSessionsCount,
         failedSessions: failedSessionsCount,
         avgSessionsUntilClear: avgSessionsUntilClear,

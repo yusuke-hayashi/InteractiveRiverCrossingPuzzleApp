@@ -389,6 +389,20 @@ function App() {
     
     if (leftError || rightError) {
       const errorMessage = leftError || rightError;
+      
+      // 制約違反ログを記録
+      const violationLogEntry = await createLogEntry(
+        newState.moves + 1,
+        '制約違反',
+        errorMessage,
+        newState.leftSide,
+        newState.rightSide,
+        newState.boat,
+        newState.moves,
+        false
+      );
+      newState.operationLog = [...newState.operationLog, violationLogEntry];
+      
       // セッションを失敗状態に更新
       const endTime = new Date().toISOString();
       await updateSessionStatus(userId, currentSessionNumber.current, 'failed', endTime);
