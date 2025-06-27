@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 
 function App() {
+  // ユーザーID管理
+  const [userId, setUserId] = useState('');
+  const [showUserIdModal, setShowUserIdModal] = useState(true);
+  const [tempUserId, setTempUserId] = useState('');
+
   // 初期状態：すべて左岸にいる（船頭は船と一緒）
   const [gameState, setGameState] = useState({
     leftSide: ['cat', 'rabbit', 'vegetable'],
@@ -22,9 +27,23 @@ function App() {
     vegetable: { emoji: '🥬', name: '野菜' }
   };
 
+  // ユーザーID入力処理
+  const handleUserIdSubmit = () => {
+    const trimmedId = tempUserId.trim();
+    if (trimmedId) {
+      setUserId(trimmedId);
+      setShowUserIdModal(false);
+    } else {
+      alert('ユーザーIDを入力してください。');
+    }
+  };
+
   // ログエントリを作成するヘルパー関数
   const createLogEntry = (operationNum, operation, target, leftSide, rightSide, boat) => {
+    const timestamp = new Date().toISOString();
     return {
+      ユーザーID: userId,
+      タイムスタンプ: timestamp,
       操作番号: operationNum,
       操作: operation,
       対象: target,
@@ -38,18 +57,13 @@ function App() {
     };
   };
 
-  // CSV表示機能（ダウンロードの代わり）
-  const showCSV = () => {
-    setGameState(prev => ({ ...prev, showCSV: true }));
-  };
-
-  const closeCSV = () => {
-    setGameState(prev => ({ ...prev, showCSV: false }));
-  };
+  // CSV表示機能
+  const showCSV = () => setGameState(prev => ({ ...prev, showCSV: true }));
+  const closeCSV = () => setGameState(prev => ({ ...prev, showCSV: false }));
 
   const generateCSV = () => {
     const headers = [
-      '操作番号', '操作', '対象', '左岸_ネコ', '左岸_ウサギ', '左岸_野菜', 
+      'ユーザーID', 'タイムスタンプ', '操作番号', '操作', '対象', '左岸_ネコ', '左岸_ウサギ', '左岸_野菜', 
       '右岸_ネコ', '右岸_ウサギ', '右岸_野菜', '船の積み荷'
     ];
     
@@ -228,6 +242,84 @@ function App() {
     });
   };
 
+  // ユーザーIDが未入力の場合は入力モーダルを表示
+  if (showUserIdModal) {
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 100
+      }}>
+        <div style={{
+          backgroundColor: 'white',
+          padding: '40px',
+          borderRadius: '12px',
+          textAlign: 'center',
+          maxWidth: '400px',
+          width: '90%',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
+        }}>
+          <h2 style={{
+            fontSize: '24px',
+            marginBottom: '20px',
+            color: '#1f2937'
+          }}>
+            🚣‍♂️ 川渡り問題へようこそ
+          </h2>
+          <p style={{
+            fontSize: '16px',
+            marginBottom: '24px',
+            color: '#6b7280'
+          }}>
+            ゲーム開始前にユーザーIDを入力してください。<br/>
+            操作ログにユーザー情報が記録されます。
+          </p>
+          <input
+            type="text"
+            value={tempUserId}
+            onChange={(e) => setTempUserId(e.target.value)}
+            placeholder="ユーザーIDを入力"
+            onKeyDown={(e) => e.key === 'Enter' && handleUserIdSubmit()}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              fontSize: '16px',
+              border: '2px solid #d1d5db',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              outline: 'none',
+              boxSizing: 'border-box'
+            }}
+            autoFocus
+          />
+          <button
+            onClick={handleUserIdSubmit}
+            style={{
+              width: '100%',
+              padding: '12px 24px',
+              backgroundColor: '#2563eb',
+              color: 'white',
+              fontSize: '16px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            ゲームを開始
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ 
       maxWidth: '1200px', 
@@ -258,64 +350,103 @@ function App() {
         <p style={{ color: '#2563eb' }}>手数: {gameState.moves}</p>
       </div>
 
-      {gameState.warning && (
+      {/* 固定メッセージスペース */}
+      <div style={{
+        height: '80px',
+        marginBottom: '16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative'
+      }}>
+        {/* 常に同じサイズのコンテナを表示 */}
         <div style={{
-          backgroundColor: '#fefce8',
-          border: '1px solid #facc15',
-          color: '#a16207',
-          padding: '12px 16px',
-          borderRadius: '8px',
-          marginBottom: '16px',
-          textAlign: 'center'
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
         }}>
-          <div style={{ fontWeight: 'bold' }}>操作できません</div>
-          <div>{gameState.warning}</div>
-        </div>
-      )}
-
-      {gameState.error && (
-        <div style={{
-          backgroundColor: '#fef2f2',
-          border: '1px solid #f87171',
-          color: '#dc2626',
-          padding: '12px 16px',
-          borderRadius: '8px',
-          marginBottom: '16px',
-          textAlign: 'center'
-        }}>
-          <div style={{ fontWeight: 'bold' }}>制約違反！</div>
-          <div>{gameState.error}</div>
-          <div style={{ fontSize: '12px', marginTop: '4px' }}>下の「リセット」ボタンを押してやり直してください</div>
-        </div>
-      )}
-
-      {gameState.gameWon && (
-        <div style={{
-          backgroundColor: '#f0fdf4',
-          border: '1px solid #4ade80',
-          color: '#166534',
-          padding: '12px 16px',
-          borderRadius: '8px',
-          marginBottom: '16px',
-          textAlign: 'center'
-        }}>
-          <div style={{ fontSize: '20px', fontWeight: 'bold' }}>🎉 おめでとうございます！</div>
-          <div style={{ marginBottom: '12px' }}>{gameState.moves}手でクリアしました！</div>
-          <button
-            onClick={showCSV}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#16a34a',
-              color: 'white',
+          {gameState.warning && (
+            <div style={{
+              backgroundColor: '#fefce8',
+              border: '1px solid #facc15',
+              color: '#a16207',
+              padding: '12px 16px',
               borderRadius: '8px',
-              border: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            📊 操作ログを表示
-          </button>
+              textAlign: 'center',
+              width: '100%',
+              maxWidth: '600px',
+              boxSizing: 'border-box'
+            }}>
+              <div style={{ fontWeight: 'bold' }}>⚠️ 操作できません</div>
+              <div>{gameState.warning}</div>
+            </div>
+          )}
+
+          {gameState.error && (
+            <div style={{
+              backgroundColor: '#fef2f2',
+              border: '1px solid #f87171',
+              color: '#dc2626',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              textAlign: 'center',
+              width: '100%',
+              maxWidth: '600px',
+              boxSizing: 'border-box'
+            }}>
+              <div style={{ fontWeight: 'bold' }}>❌ 制約違反！</div>
+              <div>{gameState.error}</div>
+              <div style={{ fontSize: '12px', marginTop: '4px' }}>下の「リセット」ボタンを押してやり直してください</div>
+            </div>
+          )}
+
+          {gameState.gameWon && (
+            <div style={{
+              backgroundColor: '#f0fdf4',
+              border: '1px solid #4ade80',
+              color: '#166534',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              textAlign: 'center',
+              width: '100%',
+              maxWidth: '600px',
+              boxSizing: 'border-box'
+            }}>
+              <div style={{ fontSize: '20px', fontWeight: 'bold' }}>🎉 おめでとうございます！</div>
+              <div style={{ marginBottom: '12px' }}>{gameState.moves}手でクリアしました！</div>
+              <button
+                onClick={showCSV}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#16a34a',
+                  color: 'white',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                📊 操作ログを表示
+              </button>
+            </div>
+          )}
+
+          {!gameState.warning && !gameState.error && !gameState.gameWon && (
+            <div style={{
+              color: '#9ca3af',
+              fontSize: '14px',
+              fontStyle: 'italic',
+              textAlign: 'center'
+            }}>
+              メッセージエリア
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       <div style={{ 
         display: 'flex', 
@@ -446,21 +577,21 @@ function App() {
             🚤 船を移動 {gameState.boatSide === 'left' ? '→' : '←'}
           </button>
           
-          {/* 船の乗客表示 */}
-          {gameState.boat.filter(item => item !== 'farmer').length > 0 && (
-            <div style={{
-              padding: '12px',
-              backgroundColor: '#fefce8',
-              borderRadius: '8px',
-              textAlign: 'center',
-              border: '2px solid #facc15'
-            }}>
-              <p style={{ fontSize: '14px', fontWeight: 'bold', margin: 0 }}>
-                船の乗客: 船頭 + 
-                {gameState.boat.filter(item => item !== 'farmer').map(item => ` ${items[item].name}`).join(', ')}
-              </p>
-            </div>
-          )}
+          {/* 船の乗客表示（常に表示） */}
+          <div style={{
+            padding: '12px',
+            backgroundColor: '#fefce8',
+            borderRadius: '8px',
+            textAlign: 'center',
+            border: '2px solid #facc15'
+          }}>
+            <p style={{ fontSize: '14px', fontWeight: 'bold', margin: 0 }}>
+              船の乗客: 船頭{gameState.boat.filter(item => item !== 'farmer').length > 0 
+                ? ` + ${gameState.boat.filter(item => item !== 'farmer').map(item => items[item].name).join(', ')}`
+                : ' のみ'
+              }
+            </p>
+          </div>
         </div>
 
         {/* 右岸 */}
@@ -613,7 +744,7 @@ function App() {
                   📋 クリップボードにコピー
                 </button>
                 <span style={{ fontSize: '12px', color: '#6b7280' }}>
-                  ファイル名例: 川渡り問題_ログ_{gameState.moves}手.csv
+                  ファイル名例: 川渡り問題_{userId}_{gameState.moves}手.csv
                 </span>
               </div>
             </div>
