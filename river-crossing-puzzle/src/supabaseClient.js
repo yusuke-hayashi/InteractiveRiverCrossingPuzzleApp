@@ -148,6 +148,7 @@ export const updateSessionStatus = async (userId, sessionNumber, status, endTime
       .update(updateData)
       .eq('user_id', userId)
       .eq('session_number', sessionNumber)
+      .eq('operation', 'セッション開始')
 
     if (error) {
       console.error('セッション状態更新エラー:', error)
@@ -279,19 +280,13 @@ export const getOverallStatistics = async (dateRange = null) => {
     // ユニークユーザー数
     const uniqueUsers = [...new Set(data.map(log => log.user_id))]
     
-    // デバッグ用ログ
-    console.log('全データ数:', data.length)
-    console.log('データサンプル:', data.slice(0, 3))
-    
     // ゲーム完了したユーザーを取得（game_completedがtrueのログから）
     const gameCompletedLogs = data.filter(log => 
       log.game_completed === true && log.operation === 'ゲーム完了'
     )
-    console.log('ゲーム完了ログ数:', gameCompletedLogs.length)
     
     // セッション開始ログを取得してステータス別にカウント
     const sessionStartLogs = data.filter(log => log.operation === 'セッション開始')
-    console.log('セッション開始ログ数:', sessionStartLogs.length)
     
     // セッションごとのステータスを取得
     const sessionStatusMap = {}
@@ -323,10 +318,23 @@ export const getOverallStatistics = async (dateRange = null) => {
       }
     })
     
-    console.log('完了セッション数:', completedSessionsCount)
-    console.log('失敗セッション数:', failedSessionsCount)
-    console.log('アクティブセッション数:', activeSessionsCount)
-    console.log('放棄セッション数:', abandonedSessionsCount)
+    // 実際のゲーム完了・制約違反ログからカウント
+    const actualCompletedSessions = new Set()
+    const actualFailedSessions = new Set()
+    
+    data.forEach(log => {
+      const sessionKey = `${log.user_id}_${log.session_number}`
+      
+      // ゲーム完了ログがあるセッション
+      if (log.game_completed === true && log.operation === 'ゲーム完了') {
+        actualCompletedSessions.add(sessionKey)
+      }
+      
+      // 制約違反ログがあるセッション
+      if (log.operation === '制約違反') {
+        actualFailedSessions.add(sessionKey)
+      }
+    })
 
     // 制約違反の分析（失敗したゲームログから）
     const violations = { catRabbit: 0, rabbitVegetable: 0 }
@@ -390,8 +398,8 @@ export const getOverallStatistics = async (dateRange = null) => {
         totalUsers: uniqueUsers.length,
         solvedUsers: solvedUsers.length,
         totalSessions: sessionStartLogs.length,
-        completedSessions: completedSessionsCount,
-        failedSessions: failedSessionsCount,
+        completedSessions: actualCompletedSessions.size,
+        failedSessions: actualFailedSessions.size,
         avgSessionsUntilClear: avgSessionsUntilClear,
         violations
       }
