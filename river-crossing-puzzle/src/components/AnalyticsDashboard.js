@@ -55,8 +55,10 @@ function AnalyticsDashboard() {
 
   // データ取得
   useEffect(() => {
-    loadData();
-  }, [dateFilter, customStartDate, customEndDate]);
+    if (dateFilter !== 'custom') {
+      loadData();
+    }
+  }, [dateFilter]);
 
   // リアルタイム更新
   useEffect(() => {
@@ -70,6 +72,37 @@ function AnalyticsDashboard() {
       }
     };
   }, []);
+
+  // 開始日時変更時の処理
+  const handleStartDateChange = (newStartDate) => {
+    setCustomStartDate(newStartDate);
+    // 終了日時が未設定または開始日時より前の場合、開始日時と同じ日の23:59に設定
+    if (!customEndDate || new Date(newStartDate) > new Date(customEndDate)) {
+      const startDate = new Date(newStartDate);
+      // 同じ日の23:59に設定
+      const year = startDate.getFullYear();
+      const month = String(startDate.getMonth() + 1).padStart(2, '0');
+      const day = String(startDate.getDate()).padStart(2, '0');
+      const endDateString = `${year}-${month}-${day}T23:59`;
+      setCustomEndDate(endDateString);
+    }
+  };
+
+  // 終了日時変更時の処理
+  const handleEndDateChange = (newEndDate) => {
+    // 開始日時より前には設定できない
+    if (customStartDate && new Date(newEndDate) < new Date(customStartDate)) {
+      return; // 変更を無視
+    }
+    setCustomEndDate(newEndDate);
+  };
+
+  // カスタム範囲でデータを取得
+  const loadCustomRangeData = () => {
+    if (customStartDate && customEndDate) {
+      loadData();
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -241,30 +274,51 @@ function AnalyticsDashboard() {
             </select>
             
             {showCustomRange && (
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input
-                  type="datetime-local"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="datetime-local"
+                    value={customStartDate}
+                    onChange={(e) => handleStartDateChange(e.target.value)}
+                    style={{
+                      padding: '6px 8px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '12px'
+                    }}
+                    placeholder="開始日時"
+                  />
+                  <span style={{ fontSize: '12px', color: '#6b7280' }}>〜</span>
+                  <input
+                    type="datetime-local"
+                    value={customEndDate}
+                    onChange={(e) => handleEndDateChange(e.target.value)}
+                    min={customStartDate}
+                    style={{
+                      padding: '6px 8px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '12px'
+                    }}
+                    placeholder="終了日時"
+                  />
+                </div>
+                <button
+                  onClick={loadCustomRangeData}
+                  disabled={!customStartDate || !customEndDate}
                   style={{
-                    padding: '6px 8px',
-                    border: '1px solid #d1d5db',
+                    padding: '6px 12px',
+                    backgroundColor: customStartDate && customEndDate ? '#3b82f6' : '#9ca3af',
+                    color: 'white',
+                    border: 'none',
                     borderRadius: '4px',
-                    fontSize: '12px'
+                    fontSize: '12px',
+                    cursor: customStartDate && customEndDate ? 'pointer' : 'not-allowed',
+                    fontWeight: '500'
                   }}
-                />
-                <span style={{ fontSize: '12px', color: '#6b7280' }}>〜</span>
-                <input
-                  type="datetime-local"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  style={{
-                    padding: '6px 8px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '4px',
-                    fontSize: '12px'
-                  }}
-                />
+                >
+                  検索
+                </button>
               </div>
             )}
             <button
