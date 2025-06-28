@@ -318,33 +318,67 @@ export const getOverallStatistics = async (dateRange = null) => {
       }
     })
     
-    // 実際のゲーム完了・制約違反ログからカウント
+    // 実際のゲーム完了・失敗ログからカウント
     const actualCompletedSessions = new Set()
     const actualFailedSessions = new Set()
+    const sessionStatus = {}
     
+    // セッションごとの状態を追跡
     data.forEach(log => {
       const sessionKey = `${log.user_id}_${log.session_number}`
       
-      // ゲーム完了ログがあるセッション
-      if (log.game_completed === true && log.operation === 'ゲーム完了') {
-        actualCompletedSessions.add(sessionKey)
+      // セッション開始時刻を記録
+      if (log.operation === 'セッション開始') {
+        sessionStatus[sessionKey] = {
+          startTime: new Date(log.timestamp),
+          hasCompletion: false,
+          hasFailed: false
+        }
       }
       
-      // 制約違反ログがあるセッション
-      if (log.operation === '制約違反') {
+      // 成功完了ログがあるセッション（game_completed=trueかつ制約違反でない）
+      if (log.game_completed === true && log.operation === 'ゲーム完了' && 
+          !log.target.includes('制約違反')) {
+        actualCompletedSessions.add(sessionKey)
+        if (sessionStatus[sessionKey]) {
+          sessionStatus[sessionKey].hasCompletion = true
+        }
+      }
+      
+      // 制約違反で終了したセッション
+      if (log.operation === 'ゲーム完了' && log.target && log.target.includes('制約違反')) {
+        actualFailedSessions.add(sessionKey)
+        if (sessionStatus[sessionKey]) {
+          sessionStatus[sessionKey].hasFailed = true
+        }
+      }
+    })
+    
+    // 放置・離脱セッションの判定（30分以上経過してゲーム完了していない）
+    const now = new Date()
+    const timeoutMinutes = 30
+    
+    Object.keys(sessionStatus).forEach(sessionKey => {
+      const session = sessionStatus[sessionKey]
+      const timeDiff = (now - session.startTime) / (1000 * 60) // 分単位
+      
+      // 30分以上経過してゲーム完了していないセッションは失敗扱い
+      if (timeDiff > timeoutMinutes && !session.hasCompletion && !session.hasFailed) {
         actualFailedSessions.add(sessionKey)
       }
     })
 
-    // 制約違反の分析（失敗したゲームログから）
-    const violations = { catRabbit: 0, rabbitVegetable: 0 }
-    const failedGameLogs = data.filter(log => log.session_status === 'failed')
-    failedGameLogs.forEach(session => {
-      // エラーメッセージから制約違反の種類を判定
-      if (session.operation && session.operation.includes('移動') && session.target) {
-        // 実際の制約違反はApp.jsのcheckConstraints関数で判定される
-        // ここでは簡易的に判定
-        violations.catRabbit++
+    // 制約違反の分析（制約違反で終了したログから）
+    const violations = { catRabbit: 0, rabbitVegetable: 0, other: 0 }
+    data.forEach(log => {
+      if (log.operation === 'ゲーム完了' && log.target && log.target.includes('制約違反')) {
+        if (log.target.includes('ネコとウサギ')) {
+          violations.catRabbit++
+        } else if (log.target.includes('ウサギと野菜')) {
+          violations.rabbitVegetable++
+        } else {
+          violations.other++
+        }
       }
     })
 

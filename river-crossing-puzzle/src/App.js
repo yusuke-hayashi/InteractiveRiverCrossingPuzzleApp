@@ -390,11 +390,21 @@ function App() {
     if (leftError || rightError) {
       const errorMessage = leftError || rightError;
       
-      // 制約違反ログを記録
+      // 制約違反の内容を分類
+      let violationType = '';
+      if (errorMessage.includes('ネコとウサギ')) {
+        violationType = '制約違反：ネコとウサギ';
+      } else if (errorMessage.includes('ウサギと野菜')) {
+        violationType = '制約違反：ウサギと野菜';
+      } else {
+        violationType = '制約違反：その他';
+      }
+      
+      // 制約違反ログを記録（operationを「ゲーム完了」、targetに違反内容）
       const violationLogEntry = await createLogEntry(
         newState.moves + 1,
-        '制約違反',
-        errorMessage,
+        'ゲーム完了',
+        violationType,
         newState.leftSide,
         newState.rightSide,
         newState.boat,

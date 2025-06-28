@@ -151,6 +151,7 @@ function AnalyticsDashboard() {
   const violationData = overallStats ? [
     { name: 'ネコ・ウサギ違反', value: overallStats.violations.catRabbit, color: '#ef4444' },
     { name: 'ウサギ・野菜違反', value: overallStats.violations.rabbitVegetable, color: '#f97316' },
+    { name: 'その他違反', value: overallStats.violations.other, color: '#8b5cf6' },
   ].filter(item => item.value > 0) : [];
 
   if (loading) {
