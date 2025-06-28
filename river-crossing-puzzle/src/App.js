@@ -275,6 +275,40 @@ function App() {
     return null;
   };
 
+  // 船からアイテムを降ろす
+  const removeFromBoat = async (item) => {
+    if (gameState.error || gameState.gameWon) return;
+    
+    // 船から降ろす
+    const newBoat = gameState.boat.filter(i => i !== item);
+    const targetSide = gameState.boatSide === 'left' ? 'leftSide' : 'rightSide';
+    const newTargetSide = [...gameState[targetSide], item];
+    
+    const newState = {
+      ...gameState,
+      boat: newBoat,
+      [targetSide]: newTargetSide,
+      warning: '' // 警告をクリア
+    };
+    
+    // ログ記録
+    const logEntry = await createLogEntry(
+      gameState.operationLog.length + 1,
+      '降ろす',
+      items[item]?.name,
+      newState.leftSide,
+      newState.rightSide,
+      newState.boat,
+      newState.moves,
+      false
+    );
+    
+    setGameState({
+      ...newState,
+      operationLog: [...newState.operationLog, logEntry]
+    });
+  };
+
   // アイテムを船に乗せる/降ろす
   const toggleItem = async (item) => {
     if (gameState.gameWon || gameState.error) return;
@@ -816,9 +850,26 @@ function App() {
               <span style={{ fontSize: '20px' }}>{items.farmer.emoji}</span>
               <div style={{ display: 'flex', gap: '4px' }}>
                 {gameState.boat.filter(item => item !== 'farmer').map((item, index) => (
-                  <span key={index} style={{ fontSize: '20px' }}>
+                  <button
+                    key={index}
+                    onClick={() => removeFromBoat(item)}
+                    disabled={gameState.error || gameState.gameWon}
+                    style={{
+                      fontSize: '20px',
+                      padding: '4px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: gameState.error || gameState.gameWon ? 'not-allowed' : 'pointer',
+                      opacity: gameState.error || gameState.gameWon ? 0.5 : 1,
+                      transition: 'transform 0.2s',
+                    }}
+                    onMouseEnter={(e) => !gameState.error && !gameState.gameWon && (e.target.style.transform = 'scale(1.2)')}
+                    onMouseLeave={(e) => (e.target.style.transform = 'scale(1)')}
+                    title={`${items[item]?.name}を降ろす`}
+                  >
                     {items[item].emoji}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>

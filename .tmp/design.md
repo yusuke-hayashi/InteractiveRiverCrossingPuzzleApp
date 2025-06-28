@@ -148,3 +148,63 @@ CREATE TABLE user_profiles (
 - ニックネームは20文字以内
 - 重複チェックは行わない（同じニックネームでも可）
 - 既存ユーザーへの影響を最小化
+
+---
+
+# 船からアイテムを降ろす機能設計
+
+## 概要
+船に乗せたアイテムを再度クリックすることで降ろせる機能を追加し、その操作もログに記録する。
+
+## 機能要件
+
+### 1. インタラクション
+- 船内のアイテムをクリック可能にする
+- クリックすると元の岸に戻る
+- 降ろす操作のフィードバック（アニメーション）
+
+### 2. ログ記録
+- 新しい操作タイプ「降ろす」を追加
+- 操作対象：降ろしたアイテム名
+- 船の位置（左岸/右岸）も記録
+
+### 3. UI変更
+- 船内アイテムにホバー効果追加
+- カーソルをポインターに変更
+- ツールチップで「クリックして降ろす」を表示
+
+## 技術実装
+
+### App.js修正点
+1. 船内アイテムのクリックハンドラー追加
+2. removeFromBoat関数の実装
+3. ログエントリーに「降ろす」操作を追加
+
+### 実装詳細
+```javascript
+// 船から降ろす関数
+const removeFromBoat = async (item) => {
+  const newBoat = gameState.boat.filter(i => i !== item);
+  const targetSide = gameState.boatSide === 'left' ? 'leftSide' : 'rightSide';
+  const newSideItems = [...gameState[targetSide], item];
+  
+  const newState = {
+    ...gameState,
+    boat: newBoat,
+    [targetSide]: newSideItems
+  };
+  
+  // ログ記録
+  const logEntry = await createLogEntry(
+    newState.moves + 1,
+    '降ろす',
+    items[item]?.name,
+    newState.leftSide,
+    newState.rightSide,
+    newState.boat,
+    newState.moves
+  );
+  
+  setGameState(newState);
+};
+```
