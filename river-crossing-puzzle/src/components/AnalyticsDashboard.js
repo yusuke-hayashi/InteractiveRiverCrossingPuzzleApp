@@ -40,6 +40,11 @@ function AnalyticsDashboard() {
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState('all');
   const [error, setError] = useState('');
+  
+  // カスタム日時範囲
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [showCustomRange, setShowCustomRange] = useState(false);
 
   // 認証チェック
   useEffect(() => {
@@ -51,7 +56,7 @@ function AnalyticsDashboard() {
   // データ取得
   useEffect(() => {
     loadData();
-  }, [dateFilter]);
+  }, [dateFilter, customStartDate, customEndDate]);
 
   // リアルタイム更新
   useEffect(() => {
@@ -75,7 +80,15 @@ function AnalyticsDashboard() {
       let dateRange = null;
       const now = new Date();
       
-      if (dateFilter === 'today') {
+      if (dateFilter === 'custom') {
+        // カスタム範囲
+        if (customStartDate && customEndDate) {
+          dateRange = {
+            start: new Date(customStartDate).toISOString(),
+            end: new Date(customEndDate).toISOString()
+          };
+        }
+      } else if (dateFilter === 'today') {
         dateRange = {
           start: startOfDay(now).toISOString(),
           end: now.toISOString()
@@ -206,10 +219,13 @@ function AnalyticsDashboard() {
           }}>
             川渡りパズル分析ダッシュボード
           </h1>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             <select
               value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
+              onChange={(e) => {
+                setDateFilter(e.target.value);
+                setShowCustomRange(e.target.value === 'custom');
+              }}
               style={{
                 padding: '8px 12px',
                 border: '1px solid #d1d5db',
@@ -221,7 +237,36 @@ function AnalyticsDashboard() {
               <option value="today">今日</option>
               <option value="week">今週</option>
               <option value="month">今月</option>
+              <option value="custom">カスタム範囲</option>
             </select>
+            
+            {showCustomRange && (
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="datetime-local"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  style={{
+                    padding: '6px 8px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '4px',
+                    fontSize: '12px'
+                  }}
+                />
+                <span style={{ fontSize: '12px', color: '#6b7280' }}>〜</span>
+                <input
+                  type="datetime-local"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  style={{
+                    padding: '6px 8px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '4px',
+                    fontSize: '12px'
+                  }}
+                />
+              </div>
+            )}
             <button
               onClick={() => navigate('/')}
               style={{
