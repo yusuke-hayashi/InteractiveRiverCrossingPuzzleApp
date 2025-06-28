@@ -445,13 +445,19 @@ export const getOverallStatistics = async (dateRange = null) => {
 }
 
 // ユーザー別統計の詳細を取得
-export const getUserDetailedStatistics = async (userId) => {
+export const getUserDetailedStatistics = async (userId, dateRange = null) => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('game_logs')
       .select('*')
       .eq('user_id', userId)
       .order('timestamp', { ascending: true })
+    
+    if (dateRange) {
+      query = query.gte('timestamp', dateRange.start).lte('timestamp', dateRange.end)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       console.error('ユーザー詳細統計取得エラー:', error)
@@ -623,4 +629,107 @@ export const subscribeToGameLogs = (callback) => {
     .subscribe()
 
   return subscription
+}
+
+// ユーザープロフィール管理関数
+
+// ユーザープロフィールを保存
+export const saveUserProfile = async (userId, nickname) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .upsert([{
+        user_id: userId,
+        nickname: nickname || null,
+        updated_at: new Date().toISOString()
+      }])
+
+    if (error) {
+      console.error('ユーザープロフィール保存エラー:', error)
+      return { success: false, error }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error('ユーザープロフィール保存中にエラー:', error)
+    return { success: false, error }
+  }
+}
+
+// ユーザープロフィールを取得
+export const getUserProfile = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single()
+
+    if (error && error.code !== 'PGRST116') { // PGRST116は「データが見つからない」エラー
+      console.error('ユーザープロフィール取得エラー:', error)
+      return { success: false, error }
+    }
+
+    return { success: true, data: data || null }
+  } catch (error) {
+    console.error('ユーザープロフィール取得中にエラー:', error)
+    return { success: false, error }
+  }
+}
+
+// ユーザープロフィールを更新
+export const updateUserProfile = async (userId, nickname) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .update({
+        nickname: nickname || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', userId)
+
+    if (error) {
+      console.error('ユーザープロフィール更新エラー:', error)
+      return { success: false, error }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error('ユーザープロフィール更新中にエラー:', error)
+    return { success: false, error }
+  }
+}
+
+// 全ユーザーのプロフィールを取得
+export const getAllUserProfiles = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('全ユーザープロフィール取得エラー:', error)
+      return { success: false, error }
+    }
+
+    return { success: true, data: data || [] }
+  } catch (error) {
+    console.error('全ユーザープロフィール取得中にエラー:', error)
+    return { success: false, error }
+  }
+}
+
+// ユーザーの表示名を取得（ニックネーム優先、未設定時はユーザーID）
+export const getUserDisplayName = async (userId) => {
+  try {
+    const result = await getUserProfile(userId)
+    if (result.success && result.data && result.data.nickname) {
+      return result.data.nickname
+    }
+    return userId
+  } catch (error) {
+    console.error('ユーザー表示名取得中にエラー:', error)
+    return userId
+  }
 }

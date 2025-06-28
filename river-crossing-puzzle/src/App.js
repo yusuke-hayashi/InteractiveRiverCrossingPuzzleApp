@@ -3,7 +3,8 @@ import {
   saveGameLog, 
   getLatestSessionNumber, 
   startNewSession, 
-  updateSessionStatus 
+  updateSessionStatus,
+  saveUserProfile
 } from './supabaseClient';
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
   const [userId, setUserId] = useState('');
   const [showUserIdModal, setShowUserIdModal] = useState(true);
   const [tempUserId, setTempUserId] = useState('');
+  const [tempNickname, setTempNickname] = useState('');
   
   // ゲームセッションID（ゲーム開始時に生成）
   const gameSessionId = useRef(null);
@@ -43,7 +45,21 @@ function App() {
   // ユーザーID入力処理
   const handleUserIdSubmit = async () => {
     const trimmedId = tempUserId.trim();
+    const trimmedNickname = tempNickname.trim();
+    
     if (trimmedId) {
+      // ニックネームが入力されていればプロフィールを保存
+      if (trimmedNickname) {
+        try {
+          const result = await saveUserProfile(trimmedId, trimmedNickname);
+          if (!result.success) {
+            console.error('ニックネーム保存失敗:', result.error);
+          }
+        } catch (error) {
+          console.error('ニックネーム保存中にエラー:', error);
+        }
+      }
+      
       setUserId(trimmedId);
       setShowUserIdModal(false);
       
@@ -506,15 +522,34 @@ function App() {
             marginBottom: '24px',
             color: '#6b7280'
           }}>
-            ゲーム開始前にユーザーIDを入力してください。<br/>
+            ゲーム開始前にユーザーIDとニックネーム（任意）を入力してください。<br/>
             操作ログにユーザー情報が記録されます。
           </p>
           <input
             type="text"
             value={tempUserId}
             onChange={(e) => setTempUserId(e.target.value)}
-            placeholder="ユーザーIDを入力"
+            placeholder="ユーザーIDを入力（必須）"
             onKeyDown={(e) => e.key === 'Enter' && handleUserIdSubmit()}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              fontSize: '16px',
+              border: '2px solid #d1d5db',
+              borderRadius: '8px',
+              marginBottom: '12px',
+              outline: 'none',
+              boxSizing: 'border-box'
+            }}
+            autoFocus
+          />
+          <input
+            type="text"
+            value={tempNickname}
+            onChange={(e) => setTempNickname(e.target.value)}
+            placeholder="ニックネームを入力（任意・20文字以内）"
+            onKeyDown={(e) => e.key === 'Enter' && handleUserIdSubmit()}
+            maxLength={20}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -525,7 +560,6 @@ function App() {
               outline: 'none',
               boxSizing: 'border-box'
             }}
-            autoFocus
           />
           <button
             onClick={handleUserIdSubmit}

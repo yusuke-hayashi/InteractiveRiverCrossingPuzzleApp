@@ -8,7 +8,9 @@ import {
   getUserDetailedStatistics,
   getRankingData,
   getAllUsers,
-  subscribeToGameLogs
+  subscribeToGameLogs,
+  getAllUserProfiles,
+  saveUserProfile
 } from '../supabaseClient';
 import {
   PieChart,
@@ -35,6 +37,14 @@ function AnalyticsDashboard() {
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState('');
   const [userStats, setUserStats] = useState(null);
+  const [userProfiles, setUserProfiles] = useState({});
+  
+  // 表示切替
+  const [showNicknames, setShowNicknames] = useState(true);
+  
+  // ニックネーム編集
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [editNicknameValue, setEditNicknameValue] = useState('');
   
   // UI状態
   const [loading, setLoading] = useState(true);
@@ -57,6 +67,10 @@ function AnalyticsDashboard() {
   useEffect(() => {
     if (dateFilter !== 'custom') {
       loadData();
+    }
+    // 期間フィルター変更時にユーザー詳細も再取得
+    if (selectedUser) {
+      handleUserSelect(selectedUser);
     }
   }, [dateFilter]);
 
@@ -101,6 +115,10 @@ function AnalyticsDashboard() {
   const loadCustomRangeData = () => {
     if (customStartDate && customEndDate) {
       loadData();
+      // ユーザー詳細も再取得
+      if (selectedUser) {
+        handleUserSelect(selectedUser);
+      }
     }
   };
 
@@ -139,10 +157,11 @@ function AnalyticsDashboard() {
       }
 
       // 並行してデータを取得
-      const [overallResult, rankingResult, usersResult] = await Promise.all([
+      const [overallResult, rankingResult, usersResult, profilesResult] = await Promise.all([
         getOverallStatistics(dateRange),
         getRankingData('sessions', 10),
-        getAllUsers()
+        getAllUsers(),
+        getAllUserProfiles()
       ]);
 
       if (overallResult.success) {
@@ -161,6 +180,17 @@ function AnalyticsDashboard() {
         setUsers(usersResult.data);
       } else {
         console.error('ユーザーリスト取得エラー:', usersResult.error);
+      }
+
+      if (profilesResult.success) {
+        // プロフィールをuser_idをキーとしたオブジェクトに変換
+        const profilesMap = {};
+        profilesResult.data.forEach(profile => {
+          profilesMap[profile.user_id] = profile;
+        });
+        setUserProfiles(profilesMap);
+      } else {
+        console.error('ユーザープロフィール取得エラー:', profilesResult.error);
       }
 
     } catch (error) {
@@ -182,7 +212,35 @@ function AnalyticsDashboard() {
     setSelectedUser(userId);
     
     try {
-      const result = await getUserDetailedStatistics(userId);
+      // 現在の期間フィルターを計算
+      let dateRange = null;
+      const now = new Date();
+      
+      if (dateFilter === 'custom') {
+        if (customStartDate && customEndDate) {
+          dateRange = {
+            start: new Date(customStartDate).toISOString(),
+            end: new Date(customEndDate).toISOString()
+          };
+        }
+      } else if (dateFilter === 'today') {
+        dateRange = {
+          start: startOfDay(now).toISOString(),
+          end: now.toISOString()
+        };
+      } else if (dateFilter === 'week') {
+        dateRange = {
+          start: startOfWeek(now, { locale: ja }).toISOString(),
+          end: now.toISOString()
+        };
+      } else if (dateFilter === 'month') {
+        dateRange = {
+          start: startOfMonth(now).toISOString(),
+          end: now.toISOString()
+        };
+      }
+
+      const result = await getUserDetailedStatistics(userId, dateRange);
       if (result.success) {
         setUserStats(result.data);
       } else {
@@ -191,6 +249,55 @@ function AnalyticsDashboard() {
     } catch (error) {
       console.error('ユーザー統計取得中にエラー:', error);
     }
+  };
+
+  // ユーザーの表示名を取得（ニックネーム優先、切替可能）
+  const getUserDisplayName = (userId) => {
+    if (showNicknames && userProfiles[userId] && userProfiles[userId].nickname) {
+      return userProfiles[userId].nickname;
+    }
+    return userId;
+  };
+
+  // ニックネーム編集開始
+  const startEditNickname = () => {
+    const currentNickname = userProfiles[selectedUser]?.nickname || '';
+    setEditNicknameValue(currentNickname);
+    setEditingNickname(true);
+  };
+
+  // ニックネーム保存
+  const saveNickname = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      const result = await saveUserProfile(selectedUser, editNicknameValue.trim());
+      if (result.success) {
+        // プロフィールを更新
+        setUserProfiles(prev => ({
+          ...prev,
+          [selectedUser]: {
+            user_id: selectedUser,
+            nickname: editNicknameValue.trim() || null,
+            created_at: userProfiles[selectedUser]?.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        }));
+        setEditingNickname(false);
+      } else {
+        console.error('ニックネーム保存エラー:', result.error);
+        alert('ニックネームの保存に失敗しました。');
+      }
+    } catch (error) {
+      console.error('ニックネーム保存中にエラー:', error);
+      alert('ニックネームの保存に失敗しました。');
+    }
+  };
+
+  // ニックネーム編集キャンセル
+  const cancelEditNickname = () => {
+    setEditingNickname(false);
+    setEditNicknameValue('');
   };
 
   // 制約違反の円グラフデータ
@@ -253,6 +360,22 @@ function AnalyticsDashboard() {
             川渡りパズル分析ダッシュボード
           </h1>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setShowNicknames(!showNicknames)}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: showNicknames ? '#059669' : '#6b7280',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                fontWeight: '500'
+              }}
+              title={showNicknames ? 'ユーザーID表示に切替' : 'ニックネーム表示に切替'}
+            >
+              {showNicknames ? '👤 ニックネーム表示' : '🏷️ ユーザーID表示'}
+            </button>
             <select
               value={dateFilter}
               onChange={(e) => {
@@ -634,7 +757,7 @@ function AnalyticsDashboard() {
                         {index + 1}
                       </span>
                       <span style={{ fontSize: '14px', color: '#374151' }}>
-                        {user.user_id}
+                        {getUserDisplayName(user.user_id)}
                       </span>
                     </div>
                     <span style={{
@@ -672,22 +795,90 @@ function AnalyticsDashboard() {
           </h3>
           
           <div style={{ marginBottom: '16px' }}>
-            <select
-              value={selectedUser}
-              onChange={(e) => handleUserSelect(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '14px',
-                minWidth: '200px'
-              }}
-            >
-              <option value="">ユーザーを選択してください</option>
-              {users.map(user => (
-                <option key={user} value={user}>{user}</option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <select
+                value={selectedUser}
+                onChange={(e) => handleUserSelect(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  minWidth: '200px'
+                }}
+              >
+                <option value="">ユーザーを選択してください</option>
+                {users.map(user => (
+                  <option key={user} value={user}>{getUserDisplayName(user)}</option>
+                ))}
+              </select>
+              
+              {selectedUser && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {editingNickname ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editNicknameValue}
+                        onChange={(e) => setEditNicknameValue(e.target.value)}
+                        maxLength={20}
+                        placeholder="ニックネームを入力"
+                        style={{
+                          padding: '6px 8px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '4px',
+                          fontSize: '14px',
+                          width: '150px'
+                        }}
+                      />
+                      <button
+                        onClick={saveNickname}
+                        style={{
+                          padding: '6px 12px',
+                          backgroundColor: '#059669',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        保存
+                      </button>
+                      <button
+                        onClick={cancelEditNickname}
+                        style={{
+                          padding: '6px 12px',
+                          backgroundColor: '#6b7280',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        キャンセル
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={startEditNickname}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ニックネーム設定
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {userStats && (

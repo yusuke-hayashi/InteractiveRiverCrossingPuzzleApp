@@ -100,3 +100,51 @@
 - パスワードは環境変数で管理
 - 管理者セッションのタイムアウト設定（30分）
 - HTTPSでの通信必須
+
+---
+
+# ニックネーム機能設計
+
+## 概要
+ユーザーがユーザーIDとは別にニックネームを登録できる機能を追加し、分析ダッシュボードでニックネーム表示を優先する。
+
+## 機能要件
+
+### 1. ニックネーム登録
+- ユーザーID入力時にニックネームも同時入力可能
+- ニックネームは任意（未入力の場合はユーザーIDを表示）
+- 既存ユーザーも後からニックネーム設定可能
+
+### 2. データベース設計
+- 新テーブル `user_profiles` を作成
+  - user_id (primary key)
+  - nickname (varchar)
+  - created_at (timestamp)
+  - updated_at (timestamp)
+
+### 3. 分析ダッシュボード表示
+- デフォルト：ニックネーム表示（未設定時はユーザーID）
+- 切替ボタンでユーザーID⇔ニックネーム表示を切替
+- ランキング、ユーザー選択リスト、詳細表示すべてに適用
+
+## 技術実装
+
+### データベース
+```sql
+CREATE TABLE user_profiles (
+  user_id VARCHAR PRIMARY KEY,
+  nickname VARCHAR,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### フロントエンド
+1. App.js: ユーザーID入力時にニックネーム入力フィールド追加
+2. supabaseClient.js: ニックネーム関連のCRUD操作関数追加
+3. AnalyticsDashboard.js: 表示切替機能追加
+
+### UX考慮点
+- ニックネームは20文字以内
+- 重複チェックは行わない（同じニックネームでも可）
+- 既存ユーザーへの影響を最小化
