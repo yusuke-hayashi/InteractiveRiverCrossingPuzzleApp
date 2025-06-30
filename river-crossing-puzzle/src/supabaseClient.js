@@ -510,14 +510,21 @@ export const getUserDetailedStatistics = async (userId, dateRange = null) => {
 }
 
 // ランキングデータを取得（初回クリアまでのセッション数）
-export const getRankingData = async (type = 'sessions', limit = 10) => {
+export const getRankingData = async (type = 'sessions', limit = 10, dateRange = null) => {
   try {
-    // 全ユーザーのデータを取得
-    const { data, error } = await supabase
+    // クエリを構築
+    let query = supabase
       .from('game_logs')
       .select('*')
       .order('user_id', { ascending: true })
       .order('session_number', { ascending: true })
+    
+    // 日付範囲が指定されている場合はフィルタリング
+    if (dateRange) {
+      query = query.gte('timestamp', dateRange.start).lte('timestamp', dateRange.end)
+    }
+    
+    const { data, error } = await query
 
     if (error) {
       console.error('ランキングデータ取得エラー:', error)
@@ -565,12 +572,16 @@ export const getRankingData = async (type = 'sessions', limit = 10) => {
       })
 
       // 初回クリアした場合のみランキングに追加
-      if (firstClearSession) {
-        userFirstClearSessions[userId] = {
-          user_id: userId,
-          sessions_until_first_clear: firstClearSession,
-          timestamp: firstClearTimestamp,
-          session_number: firstClearSession
+      // 日付範囲が指定されている場合は、その期間内に初回クリアしたユーザーのみ
+      if (firstClearSession && firstClearTimestamp) {
+        // 日付範囲が指定されていない、またはクリア日時が範囲内の場合
+        if (!dateRange || (new Date(firstClearTimestamp) >= new Date(dateRange.start) && new Date(firstClearTimestamp) <= new Date(dateRange.end))) {
+          userFirstClearSessions[userId] = {
+            user_id: userId,
+            sessions_until_first_clear: firstClearSession,
+            timestamp: firstClearTimestamp,
+            session_number: firstClearSession
+          }
         }
       }
     })

@@ -87,7 +87,7 @@ function AnalyticsDashboard() {
       // 並行してデータを取得
       const [overallResult, rankingResult, usersResult, profilesResult] = await Promise.all([
         getOverallStatistics(dateRange),
-        getRankingData('sessions', 10),
+        getRankingData('sessions', 10, dateRange),
         getAllUsers(),
         getAllUserProfiles()
       ]);
@@ -720,7 +720,7 @@ function AnalyticsDashboard() {
               marginBottom: '16px',
               color: '#1f2937'
             }}>
-              初回クリアランキング TOP10
+              初回クリアランキング TOP10{dateFilter !== 'all' ? ' （期間内）' : ''}
             </h3>
             {ranking.length > 0 ? (
               <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
