@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
 import { startOfDay, startOfWeek, startOfMonth } from 'date-fns';
@@ -49,73 +49,8 @@ function AnalyticsDashboard() {
   const [customEndDate, setCustomEndDate] = useState('');
   const [showCustomRange, setShowCustomRange] = useState(false);
 
-  // 認証チェック
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/admin/login');
-    }
-  }, [isAuthenticated, navigate]);
-
-  // データ取得
-  useEffect(() => {
-    if (dateFilter !== 'custom') {
-      loadData();
-    }
-    // 期間フィルター変更時にユーザー詳細も再取得
-    if (selectedUser) {
-      handleUserSelect(selectedUser);
-    }
-  }, [dateFilter, handleUserSelect, loadData, selectedUser]);
-
-  // リアルタイム更新
-  useEffect(() => {
-    const subscription = subscribeToGameLogs(() => {
-      loadData(); // データが更新されたら再取得
-    });
-
-    return () => {
-      if (subscription) {
-        subscription.unsubscribe();
-      }
-    };
-  }, [loadData]);
-
-  // 開始日時変更時の処理
-  const handleStartDateChange = (newStartDate) => {
-    setCustomStartDate(newStartDate);
-    // 終了日時が未設定または開始日時より前の場合、開始日時と同じ日の23:59に設定
-    if (!customEndDate || new Date(newStartDate) > new Date(customEndDate)) {
-      const startDate = new Date(newStartDate);
-      // 同じ日の23:59に設定
-      const year = startDate.getFullYear();
-      const month = String(startDate.getMonth() + 1).padStart(2, '0');
-      const day = String(startDate.getDate()).padStart(2, '0');
-      const endDateString = `${year}-${month}-${day}T23:59`;
-      setCustomEndDate(endDateString);
-    }
-  };
-
-  // 終了日時変更時の処理
-  const handleEndDateChange = (newEndDate) => {
-    // 開始日時より前には設定できない
-    if (customStartDate && new Date(newEndDate) < new Date(customStartDate)) {
-      return; // 変更を無視
-    }
-    setCustomEndDate(newEndDate);
-  };
-
-  // カスタム範囲でデータを取得
-  const loadCustomRangeData = () => {
-    if (customStartDate && customEndDate) {
-      loadData();
-      // ユーザー詳細も再取得
-      if (selectedUser) {
-        handleUserSelect(selectedUser);
-      }
-    }
-  };
-
-  const loadData = async () => {
+  // データ取得関数
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError('');
 
@@ -192,10 +127,10 @@ function AnalyticsDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateFilter, customStartDate, customEndDate]);
 
   // ユーザー選択時の詳細取得
-  const handleUserSelect = async (userId) => {
+  const handleUserSelect = useCallback(async (userId) => {
     if (!userId) {
       setSelectedUser('');
       setUserStats(null);
@@ -242,7 +177,73 @@ function AnalyticsDashboard() {
     } catch (error) {
       console.error('ユーザー統計取得中にエラー:', error);
     }
+  }, [dateFilter, customStartDate, customEndDate]);
+
+  // 開始日時変更時の処理
+  const handleStartDateChange = (newStartDate) => {
+    setCustomStartDate(newStartDate);
+    // 終了日時が未設定または開始日時より前の場合、開始日時と同じ日の23:59に設定
+    if (!customEndDate || new Date(newStartDate) > new Date(customEndDate)) {
+      const startDate = new Date(newStartDate);
+      // 同じ日の23:59に設定
+      const year = startDate.getFullYear();
+      const month = String(startDate.getMonth() + 1).padStart(2, '0');
+      const day = String(startDate.getDate()).padStart(2, '0');
+      const endDateString = `${year}-${month}-${day}T23:59`;
+      setCustomEndDate(endDateString);
+    }
   };
+
+  // 終了日時変更時の処理
+  const handleEndDateChange = (newEndDate) => {
+    // 開始日時より前には設定できない
+    if (customStartDate && new Date(newEndDate) < new Date(customStartDate)) {
+      return; // 変更を無視
+    }
+    setCustomEndDate(newEndDate);
+  };
+
+  // カスタム範囲でデータを取得
+  const loadCustomRangeData = useCallback(() => {
+    if (customStartDate && customEndDate) {
+      loadData();
+      // ユーザー詳細も再取得
+      if (selectedUser) {
+        handleUserSelect(selectedUser);
+      }
+    }
+  }, [customStartDate, customEndDate, loadData, selectedUser, handleUserSelect]);
+
+  // 認証チェック
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/admin/login');
+    }
+  }, [isAuthenticated, navigate]);
+
+  // データ取得
+  useEffect(() => {
+    if (dateFilter !== 'custom') {
+      loadData();
+    }
+    // 期間フィルター変更時にユーザー詳細も再取得
+    if (selectedUser) {
+      handleUserSelect(selectedUser);
+    }
+  }, [dateFilter, handleUserSelect, loadData, selectedUser]);
+
+  // リアルタイム更新
+  useEffect(() => {
+    const subscription = subscribeToGameLogs(() => {
+      loadData(); // データが更新されたら再取得
+    });
+
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe();
+      }
+    };
+  }, [loadData]);
 
   // ユーザーの表示名を取得（ニックネーム優先、切替可能）
   const getUserDisplayName = (userId) => {

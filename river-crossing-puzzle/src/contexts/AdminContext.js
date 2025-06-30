@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 
 const AdminContext = createContext();
 
@@ -17,8 +17,15 @@ export const AdminProvider = ({ children }) => {
   // セッションタイムアウト（30分）
   const SESSION_TIMEOUT = 30 * 60 * 1000; // 30分
 
+  // ログアウト
+  const logout = useCallback(() => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('adminAuth');
+    localStorage.removeItem('adminLastActivity');
+  }, []);
+
   // 認証チェック
-  const checkAuth = () => {
+  const checkAuth = useCallback(() => {
     const storedAuth = localStorage.getItem('adminAuth');
     const storedTime = localStorage.getItem('adminLastActivity');
     
@@ -34,7 +41,7 @@ export const AdminProvider = ({ children }) => {
     // タイムアウトまたは未認証の場合
     logout();
     return false;
-  };
+  }, [SESSION_TIMEOUT, logout]);
 
   // ログイン
   const login = (password) => {
@@ -48,22 +55,6 @@ export const AdminProvider = ({ children }) => {
     return false;
   };
 
-  // ログアウト
-  const logout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem('adminAuth');
-    localStorage.removeItem('adminLastActivity');
-  };
-
-  // アクティビティを更新
-  const updateActivity = () => {
-    if (isAuthenticated) {
-      const now = Date.now();
-      setLastActivity(now);
-      localStorage.setItem('adminLastActivity', now.toString());
-    }
-  };
-
   // 初回マウント時に認証状態をチェック
   useEffect(() => {
     checkAuth();
@@ -72,6 +63,15 @@ export const AdminProvider = ({ children }) => {
   // アクティビティ監視
   useEffect(() => {
     if (!isAuthenticated) return;
+
+    // アクティビティを更新
+    const updateActivity = () => {
+      if (isAuthenticated) {
+        const now = Date.now();
+        setLastActivity(now);
+        localStorage.setItem('adminLastActivity', now.toString());
+      }
+    };
 
     // マウスムーブやクリックでアクティビティを更新
     const handleActivity = () => updateActivity();
@@ -95,7 +95,7 @@ export const AdminProvider = ({ children }) => {
       window.removeEventListener('keypress', handleActivity);
       clearInterval(interval);
     };
-  }, [isAuthenticated, lastActivity, SESSION_TIMEOUT, updateActivity]);
+  }, [isAuthenticated, lastActivity, SESSION_TIMEOUT, logout]);
 
   const value = {
     isAuthenticated,
