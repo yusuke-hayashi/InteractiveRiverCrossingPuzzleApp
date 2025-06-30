@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
-import { format, startOfDay, startOfWeek, startOfMonth } from 'date-fns';
+import { startOfDay, startOfWeek, startOfMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import {
   getOverallStatistics,
@@ -16,15 +16,8 @@ import {
   PieChart,
   Pie,
   Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line
+  ResponsiveContainer
 } from 'recharts';
 
 function AnalyticsDashboard() {
@@ -72,7 +65,7 @@ function AnalyticsDashboard() {
     if (selectedUser) {
       handleUserSelect(selectedUser);
     }
-  }, [dateFilter]);
+  }, [dateFilter, handleUserSelect, loadData, selectedUser]);
 
   // リアルタイム更新
   useEffect(() => {
@@ -85,7 +78,7 @@ function AnalyticsDashboard() {
         subscription.unsubscribe();
       }
     };
-  }, []);
+  }, [loadData]);
 
   // 開始日時変更時の処理
   const handleStartDateChange = (newStartDate) => {

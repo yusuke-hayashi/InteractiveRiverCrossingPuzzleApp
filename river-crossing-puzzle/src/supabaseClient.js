@@ -295,25 +295,19 @@ export const getOverallStatistics = async (dateRange = null) => {
       sessionStatusMap[sessionKey] = log.session_status
     })
     
-    // ステータス別にカウント
-    let completedSessionsCount = 0
-    let failedSessionsCount = 0
-    let activeSessionsCount = 0
-    let abandonedSessionsCount = 0
-    
+    // ステータス別にカウント（現在は未使用）
     Object.values(sessionStatusMap).forEach(status => {
       switch(status) {
         case 'completed':
-          completedSessionsCount++
           break
         case 'failed':
-          failedSessionsCount++
           break
         case 'active':
-          activeSessionsCount++
           break
         case 'abandoned':
-          abandonedSessionsCount++
+          break
+        default:
+          // その他のステータスは無視
           break
       }
     })

@@ -67,7 +67,7 @@ export const AdminProvider = ({ children }) => {
   // 初回マウント時に認証状態をチェック
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, [checkAuth]);
 
   // アクティビティ監視
   useEffect(() => {
@@ -95,7 +95,7 @@ export const AdminProvider = ({ children }) => {
       window.removeEventListener('keypress', handleActivity);
       clearInterval(interval);
     };
-  }, [isAuthenticated, lastActivity]);
+  }, [isAuthenticated, lastActivity, SESSION_TIMEOUT, updateActivity]);
 
   const value = {
     isAuthenticated,
