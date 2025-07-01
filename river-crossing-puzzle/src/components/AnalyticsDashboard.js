@@ -754,13 +754,24 @@ function AnalyticsDashboard() {
                         {getUserDisplayName(user.user_id)}
                       </span>
                     </div>
-                    <span style={{
-                      fontSize: '16px',
-                      fontWeight: 'bold',
-                      color: '#059669'
-                    }}>
-                      {user.sessions_until_first_clear}回目
-                    </span>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                        color: '#059669'
+                      }}>
+                        {user.sessions_until_first_clear}回目
+                      </div>
+                      {user.moves_count && (
+                        <div style={{
+                          fontSize: '12px',
+                          color: '#6b7280',
+                          marginTop: '2px'
+                        }}>
+                          {user.moves_count}手
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

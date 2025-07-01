@@ -576,11 +576,17 @@ export const getRankingData = async (type = 'sessions', limit = 10, dateRange = 
       if (firstClearSession && firstClearTimestamp) {
         // 日付範囲が指定されていない、またはクリア日時が範囲内の場合
         if (!dateRange || (new Date(firstClearTimestamp) >= new Date(dateRange.start) && new Date(firstClearTimestamp) <= new Date(dateRange.end))) {
+          // 初回クリアセッションの操作回数を取得
+          const firstClearSessionLogs = sessionGroups[firstClearSession]
+          const gameCompletedLog = firstClearSessionLogs.find(log => log.game_completed === true && log.operation === 'ゲーム完了')
+          const movesCount = gameCompletedLog ? gameCompletedLog.moves_count : null
+          
           userFirstClearSessions[userId] = {
             user_id: userId,
             sessions_until_first_clear: firstClearSession,
             timestamp: firstClearTimestamp,
-            session_number: firstClearSession
+            session_number: firstClearSession,
+            moves_count: movesCount
           }
         }
       }
