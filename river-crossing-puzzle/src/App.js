@@ -91,7 +91,7 @@ function App() {
         console.log(`セッション ${newSessionNumber} を開始しました`);
         
         // ゲーム開始ログを記録（userIdを明示的に渡す）
-        await createLogEntry(
+        const startLogEntry = await createLogEntry(
           1,
           'ゲーム開始',
           '新規ゲーム',
@@ -102,6 +102,12 @@ function App() {
           false,
           userId
         );
+        
+        // 操作ログ配列に追加
+        setGameState(prev => ({
+          ...prev,
+          operationLog: [startLogEntry]
+        }));
       } else {
         console.error('セッション開始失敗:', sessionResult.error);
       }
@@ -515,7 +521,7 @@ function App() {
     
     // リセットログを記録（現在のセッション内で続ける場合）
     if (currentSessionNumber.current && !gameState.gameWon) {
-      await createLogEntry(
+      const resetLogEntry = await createLogEntry(
         currentOperationLog.length + 1,
         'リセット',
         'ゲームリセット',
@@ -525,10 +531,11 @@ function App() {
         0,
         false
       );
+      currentOperationLog.push(resetLogEntry);
       
       // ゲーム開始ログを記録
-      await createLogEntry(
-        currentOperationLog.length + 2,
+      const startLogEntry = await createLogEntry(
+        currentOperationLog.length + 1,
         'ゲーム開始',
         'リセット後',
         ['cat', 'rabbit', 'vegetable'],
@@ -537,6 +544,7 @@ function App() {
         0,
         false
       );
+      currentOperationLog.push(startLogEntry);
     }
     
     setGameState({
