@@ -227,13 +227,37 @@ function AnalyticsDashboard() {
     
     try {
       const result = await getSessionDetails(user.user_id, user.session_number);
-      if (result.success) {
-        setSessionDetails(result.data);
+      if (result.success && result.data) {
+        // 最後の成功したゲームの開始位置を見つける
+        let lastGameStartIndex = 0;
+        
+        // 後ろから探索して、最後のゲーム開始位置を見つける
+        for (let i = result.data.length - 1; i >= 0; i--) {
+          const log = result.data[i];
+          // ゲーム開始またはリセットのログを探す
+          if (log.operation === 'ゲーム開始' || log.operation === 'リセット') {
+            lastGameStartIndex = i;
+            break;
+          }
+        }
+        
+        // 最後のゲーム開始から最後（ゲーム完了）までのデータを抽出
+        const filteredData = result.data.slice(lastGameStartIndex);
+        
+        // 操作番号を1から振り直す
+        const renumberedData = filteredData.map((log, index) => ({
+          ...log,
+          operation_number: index + 1
+        }));
+        
+        setSessionDetails(renumberedData);
       } else {
         console.error('セッション詳細取得エラー:', result.error);
+        setSessionDetails(null);
       }
     } catch (error) {
       console.error('セッション詳細取得中にエラー:', error);
+      setSessionDetails(null);
     } finally {
       setLoadingSession(false);
     }
@@ -1078,7 +1102,7 @@ function AnalyticsDashboard() {
                   border: '1px solid #bbf7d0'
                 }}>
                   <p style={{ margin: 0, color: '#166534', fontWeight: '500' }}>
-                    クリア成功！ 操作回数: {sessionDetails[sessionDetails.length - 1]?.moves_count || 0}手
+                    クリア成功！ 操作回数: {sessionDetails.filter(log => log.operation !== 'ゲーム開始' && log.operation !== 'リセット' && log.operation !== 'ゲーム完了').length}手
                   </p>
                 </div>
                 
