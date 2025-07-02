@@ -566,6 +566,7 @@ export const getRankingData = async (type = 'sessions', limit = 10, dateRange = 
       let firstClearTimestamp = null
       let firstClearSessionNumber = null
       let movesCount = null
+      let lastGameStartIndex = -1
       
       for (let i = 0; i < userLogs.length; i++) {
         const log = userLogs[i]
@@ -573,6 +574,7 @@ export const getRankingData = async (type = 'sessions', limit = 10, dateRange = 
         // ゲーム開始をカウント
         if (log.operation === 'ゲーム開始') {
           gameStartCount++
+          lastGameStartIndex = i
         }
         
         // 初回クリアを検出
@@ -580,7 +582,17 @@ export const getRankingData = async (type = 'sessions', limit = 10, dateRange = 
           firstClearGameNumber = gameStartCount
           firstClearTimestamp = log.timestamp
           firstClearSessionNumber = log.session_number
-          movesCount = log.moves_count
+          
+          // 最後のゲーム開始から完了までの「乗せる」と「移動」操作をカウント
+          let operationCount = 0
+          if (lastGameStartIndex !== -1) {
+            for (let j = lastGameStartIndex + 1; j < i; j++) {
+              if (userLogs[j].operation === '乗せる' || userLogs[j].operation === '移動') {
+                operationCount++
+              }
+            }
+          }
+          movesCount = operationCount
           break
         }
       }

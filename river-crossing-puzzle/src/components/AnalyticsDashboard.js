@@ -1109,7 +1109,7 @@ function AnalyticsDashboard() {
                   border: '1px solid #bbf7d0'
                 }}>
                   <p style={{ margin: 0, color: '#166534', fontWeight: '500' }}>
-                    クリア成功！ 操作回数: {sessionDetails.filter(log => log.operation !== 'ゲーム開始' && log.operation !== 'リセット' && log.operation !== 'ゲーム完了').length}手
+                    クリア成功！ 操作回数: {sessionDetails.filter(log => log.operation === '乗せる' || log.operation === '移動').length}手
                   </p>
                 </div>
                 
