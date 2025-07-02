@@ -486,9 +486,31 @@ export const getUserDetailedStatistics = async (userId, dateRange = null) => {
       }
     }
     
+    // 各ゲーム完了時の実際の操作回数を計算
+    const actualMoveCounts = []
+    let currentGameStartIndex = -1
+    
+    for (let i = 0; i < data.length; i++) {
+      const log = data[i]
+      
+      if (log.operation === 'ゲーム開始') {
+        currentGameStartIndex = i
+      }
+      
+      if (log.operation === 'ゲーム完了' && log.game_completed === true && currentGameStartIndex !== -1) {
+        let operationCount = 0
+        for (let j = currentGameStartIndex + 1; j < i; j++) {
+          if (data[j].operation === '乗せる' || data[j].operation === '移動') {
+            operationCount++
+          }
+        }
+        actualMoveCounts.push(operationCount)
+      }
+    }
+    
     // 最小手数を計算
-    if (completedGames.length > 0) {
-      minMoves = Math.min(...completedGames)
+    if (actualMoveCounts.length > 0) {
+      minMoves = Math.min(...actualMoveCounts)
     }
     
     // セッション別にグループ化（表示用）
