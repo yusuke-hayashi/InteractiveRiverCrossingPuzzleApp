@@ -228,24 +228,68 @@ function AnalyticsDashboard() {
     try {
       const result = await getSessionDetails(user.user_id, user.session_number);
       if (result.success && result.data) {
-        // 最後の成功したゲームの開始位置を見つける
-        let lastGameStartIndex = 0;
+        // ゲーム完了のインデックスを見つける
+        const gameCompletedIndex = result.data.findIndex(log => 
+          log.operation === 'ゲーム完了' && log.game_completed === true
+        );
         
-        // 後ろから探索して、最後のゲーム開始位置を見つける
-        for (let i = result.data.length - 1; i >= 0; i--) {
+        if (gameCompletedIndex === -1) {
+          // ゲーム完了が見つからない場合は空配列
+          setSessionDetails([]);
+          return;
+        }
+        
+        // ゲーム完了から逆順に探索して、直前のゲーム開始/リセット/実際の操作開始を見つける
+        let gameStartIndex = 0;
+        for (let i = gameCompletedIndex - 1; i >= 0; i--) {
           const log = result.data[i];
-          // ゲーム開始またはリセットのログを探す
+          
+          // 実際のゲーム操作（乗せる、移動など）または制約違反による完了が見つかったら、
+          // その前のゲーム開始/リセットまたは最初まで遡る
+          if (log.operation === '乗せる' || log.operation === '移動' || log.operation === '降ろす' ||
+              (log.operation === 'ゲーム完了' && log.game_completed === false)) {
+            // さらに遡ってゲーム開始またはリセットを探す
+            for (let j = i - 1; j >= 0; j--) {
+              if (result.data[j].operation === 'ゲーム開始' || result.data[j].operation === 'リセット') {
+                gameStartIndex = j;
+                break;
+              }
+            }
+            break;
+          }
+          
+          // ゲーム開始またはリセットが見つかった場合
           if (log.operation === 'ゲーム開始' || log.operation === 'リセット') {
-            lastGameStartIndex = i;
+            gameStartIndex = i;
             break;
           }
         }
         
-        // 最後のゲーム開始から最後（ゲーム完了）までのデータを抽出
-        const filteredData = result.data.slice(lastGameStartIndex);
+        // ゲーム開始から完了までのデータを抽出
+        const filteredData = result.data.slice(gameStartIndex, gameCompletedIndex + 1);
+        
+        // セッション開始の重複を除去（最後の1つだけを残す）
+        const cleanedData = [];
+        let lastSessionStartIndex = -1;
+        
+        // セッション開始の最後のインデックスを見つける
+        for (let i = 0; i < filteredData.length; i++) {
+          if (filteredData[i].operation === 'セッション開始') {
+            lastSessionStartIndex = i;
+          }
+        }
+        
+        // データをクリーンアップ
+        for (let i = 0; i < filteredData.length; i++) {
+          // セッション開始は最後の1つだけ含める
+          if (filteredData[i].operation === 'セッション開始' && i < lastSessionStartIndex) {
+            continue;
+          }
+          cleanedData.push(filteredData[i]);
+        }
         
         // 操作番号を1から振り直す
-        const renumberedData = filteredData.map((log, index) => ({
+        const renumberedData = cleanedData.map((log, index) => ({
           ...log,
           operation_number: index + 1
         }));
