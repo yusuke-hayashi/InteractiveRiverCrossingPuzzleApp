@@ -10,7 +10,8 @@ import {
   getAllUsers,
   subscribeToGameLogs,
   getAllUserProfiles,
-  saveUserProfile
+  saveUserProfile,
+  getSessionDetails
 } from '../supabaseClient';
 import {
   PieChart,
@@ -48,6 +49,11 @@ function AnalyticsDashboard() {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [showCustomRange, setShowCustomRange] = useState(false);
+  
+  // セッション詳細モーダル
+  const [selectedSession, setSelectedSession] = useState(null);
+  const [sessionDetails, setSessionDetails] = useState(null);
+  const [loadingSession, setLoadingSession] = useState(false);
 
   // データ取得関数
   const loadData = useCallback(async () => {
@@ -213,6 +219,31 @@ function AnalyticsDashboard() {
       }
     }
   }, [customStartDate, customEndDate, loadData, selectedUser, handleUserSelect]);
+
+  // セッション詳細を取得
+  const handleSessionClick = async (user) => {
+    setLoadingSession(true);
+    setSelectedSession(user);
+    
+    try {
+      const result = await getSessionDetails(user.user_id, user.session_number);
+      if (result.success) {
+        setSessionDetails(result.data);
+      } else {
+        console.error('セッション詳細取得エラー:', result.error);
+      }
+    } catch (error) {
+      console.error('セッション詳細取得中にエラー:', error);
+    } finally {
+      setLoadingSession(false);
+    }
+  };
+
+  // モーダルを閉じる
+  const closeSessionModal = () => {
+    setSelectedSession(null);
+    setSessionDetails(null);
+  };
 
   // 認証チェック
   useEffect(() => {
@@ -727,13 +758,19 @@ function AnalyticsDashboard() {
                 {ranking.map((user, index) => (
                   <div
                     key={user.user_id}
+                    onClick={() => handleSessionClick(user)}
                     style={{
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       padding: '8px 0',
-                      borderBottom: index < ranking.length - 1 ? '1px solid #f3f4f6' : 'none'
+                      borderBottom: index < ranking.length - 1 ? '1px solid #f3f4f6' : 'none',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s',
+                      ':hover': { backgroundColor: '#f9fafb' }
                     }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <span style={{
@@ -964,6 +1001,144 @@ function AnalyticsDashboard() {
           )}
         </div>
       </div>
+
+      {/* セッション詳細モーダル */}
+      {selectedSession && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '24px',
+            maxWidth: '800px',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            width: '90%',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{ 
+                fontSize: '20px', 
+                fontWeight: 'bold',
+                margin: 0,
+                color: '#1f2937'
+              }}>
+                {getUserDisplayName(selectedSession.user_id)} - {selectedSession.sessions_until_first_clear}回目のセッション詳細
+              </h3>
+              <button
+                onClick={closeSessionModal}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                閉じる
+              </button>
+            </div>
+
+            {loadingSession ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}>
+                <div style={{
+                  display: 'inline-block',
+                  width: '32px',
+                  height: '32px',
+                  border: '3px solid #f3f4f6',
+                  borderTopColor: '#3b82f6',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
+              </div>
+            ) : sessionDetails && sessionDetails.length > 0 ? (
+              <div>
+                <div style={{
+                  marginBottom: '16px',
+                  padding: '12px',
+                  backgroundColor: '#f0fdf4',
+                  borderRadius: '6px',
+                  border: '1px solid #bbf7d0'
+                }}>
+                  <p style={{ margin: 0, color: '#166534', fontWeight: '500' }}>
+                    クリア成功！ 操作回数: {sessionDetails[sessionDetails.length - 1]?.moves_count || 0}手
+                  </p>
+                </div>
+                
+                <div style={{
+                  overflowX: 'auto',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '6px'
+                }}>
+                  <table style={{
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    fontSize: '14px'
+                  }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f9fafb' }}>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>手順</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>操作</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>対象</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>左岸</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>船</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>右岸</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sessionDetails.map((log, index) => {
+                        const leftItems = [];
+                        const rightItems = [];
+                        if (log.left_cat > 0) leftItems.push('🐈');
+                        if (log.left_rabbit > 0) leftItems.push('🐰');
+                        if (log.left_vegetable > 0) leftItems.push('🥬');
+                        if (log.right_cat > 0) rightItems.push('🐈');
+                        if (log.right_rabbit > 0) rightItems.push('🐰');
+                        if (log.right_vegetable > 0) rightItems.push('🥬');
+                        
+                        return (
+                          <tr key={index} style={{
+                            borderBottom: index < sessionDetails.length - 1 ? '1px solid #e5e7eb' : 'none',
+                            backgroundColor: log.operation === 'ゲーム完了' ? '#f0fdf4' : 'white'
+                          }}>
+                            <td style={{ padding: '12px' }}>{log.operation_number}</td>
+                            <td style={{ padding: '12px' }}>{log.operation}</td>
+                            <td style={{ padding: '12px' }}>{log.target || '-'}</td>
+                            <td style={{ padding: '12px' }}>{leftItems.join(' ') || 'なし'}</td>
+                            <td style={{ padding: '12px' }}>{log.boat_cargo || 'なし'}</td>
+                            <td style={{ padding: '12px' }}>{rightItems.join(' ') || 'なし'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p style={{ textAlign: 'center', color: '#6b7280', padding: '40px' }}>
+                セッションデータが見つかりません
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin {

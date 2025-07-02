@@ -627,6 +627,28 @@ export const getAllUsers = async () => {
   }
 }
 
+// 特定のセッションの詳細ログを取得
+export const getSessionDetails = async (userId, sessionNumber) => {
+  try {
+    const { data, error } = await supabase
+      .from('game_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('session_number', sessionNumber)
+      .order('operation_number', { ascending: true })
+
+    if (error) {
+      console.error('セッション詳細取得エラー:', error)
+      return { success: false, error }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error('セッション詳細取得中にエラー:', error)
+    return { success: false, error }
+  }
+}
+
 // リアルタイム更新のサブスクリプション
 export const subscribeToGameLogs = (callback) => {
   const subscription = supabase
