@@ -828,7 +828,7 @@ function AnalyticsDashboard() {
                         fontWeight: 'bold',
                         color: '#059669'
                       }}>
-                        {user.sessions_until_first_clear}回目
+                        {user.games_until_first_clear || user.sessions_until_first_clear}回目のゲーム
                       </div>
                       {user.moves_count && (
                         <div style={{
@@ -971,7 +971,7 @@ function AnalyticsDashboard() {
                   margin: '0 0 8px 0',
                   fontWeight: '500'
                 }}>
-                  初回クリアまでの挑戦回数
+                  初回クリアまでのゲーム数
                 </h4>
                 <p style={{ 
                   fontSize: '24px', 
@@ -979,7 +979,7 @@ function AnalyticsDashboard() {
                   margin: 0,
                   color: '#1f2937'
                 }}>
-                  {userStats.sessionsUntilFirstClear || 'まだクリアしていません'}
+                  {userStats.gamesUntilFirstClear ? `${userStats.gamesUntilFirstClear}回目` : (userStats.sessionsUntilFirstClear || 'まだクリアしていません')}
                 </p>
               </div>
 
@@ -1017,7 +1017,7 @@ function AnalyticsDashboard() {
                   margin: '0 0 8px 0',
                   fontWeight: '500'
                 }}>
-                  総セッション数
+                  総ゲーム数
                 </h4>
                 <p style={{ 
                   fontSize: '24px', 
@@ -1025,7 +1025,7 @@ function AnalyticsDashboard() {
                   margin: 0,
                   color: '#1f2937'
                 }}>
-                  {userStats.totalSessions}
+                  {userStats.totalGames || userStats.totalSessions}
                 </p>
               </div>
             </div>
@@ -1069,7 +1069,7 @@ function AnalyticsDashboard() {
                 margin: 0,
                 color: '#1f2937'
               }}>
-                {getUserDisplayName(selectedSession.user_id)} - {selectedSession.sessions_until_first_clear}回目のセッション詳細
+                {getUserDisplayName(selectedSession.user_id)} - {selectedSession.games_until_first_clear || selectedSession.sessions_until_first_clear}回目のゲーム詳細
               </h3>
               <button
                 onClick={closeSessionModal}

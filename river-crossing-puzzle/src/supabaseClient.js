@@ -458,7 +458,40 @@ export const getUserDetailedStatistics = async (userId, dateRange = null) => {
       return { success: false, error }
     }
 
-    // セッション別にグループ化
+    // 時系列順にソート
+    data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+    
+    // ゲーム開始の回数をカウントして初回クリアまでのゲーム数を計算
+    let gameStartCount = 0
+    let firstClearGameNumber = null
+    let minMoves = null
+    const completedGames = []
+    
+    for (let i = 0; i < data.length; i++) {
+      const log = data[i]
+      
+      // ゲーム開始をカウント
+      if (log.operation === 'ゲーム開始') {
+        gameStartCount++
+      }
+      
+      // ゲーム完了を検出
+      if (log.operation === 'ゲーム完了' && log.game_completed === true) {
+        if (!firstClearGameNumber) {
+          firstClearGameNumber = gameStartCount
+        }
+        if (log.moves_count) {
+          completedGames.push(log.moves_count)
+        }
+      }
+    }
+    
+    // 最小手数を計算
+    if (completedGames.length > 0) {
+      minMoves = Math.min(...completedGames)
+    }
+    
+    // セッション別にグループ化（表示用）
     const sessionGroups = {}
     data.forEach(log => {
       if (!sessionGroups[log.session_number]) {
@@ -466,39 +499,16 @@ export const getUserDetailedStatistics = async (userId, dateRange = null) => {
       }
       sessionGroups[log.session_number].push(log)
     })
-
-    // 初回クリアまでのセッション数（ゲーム完了したセッションから判定）
-    let firstClearSession = null
-    Object.keys(sessionGroups).sort((a, b) => a - b).forEach(sessionNum => {
-      const session = sessionGroups[sessionNum]
-      const isCompleted = session.some(log => log.game_completed === true && log.operation === 'ゲーム完了')
-      if (!firstClearSession && isCompleted) {
-        firstClearSession = parseInt(sessionNum)
-      }
-    })
-
-    // 最小手数（ゲーム完了したセッションから）
-    const completedSessionLogs = Object.values(sessionGroups).filter(session => 
-      session.some(log => log.game_completed === true && log.operation === 'ゲーム完了')
-    )
     
-    let minMoves = null
-    if (completedSessionLogs.length > 0) {
-      const movesCounts = completedSessionLogs.map(session => {
-        const gameCompletedLog = session.find(log => log.game_completed === true && log.operation === 'ゲーム完了')
-        return gameCompletedLog ? gameCompletedLog.moves_count : 0
-      }).filter(moves => moves > 0)
-      
-      if (movesCounts.length > 0) {
-        minMoves = Math.min(...movesCounts)
-      }
-    }
+    // 総ゲーム数をカウント
+    const totalGames = data.filter(log => log.operation === 'ゲーム開始').length
 
     return {
       success: true,
       data: {
-        sessionsUntilFirstClear: firstClearSession || 0,
+        gamesUntilFirstClear: firstClearGameNumber || 0,  // ゲーム数に変更
         minMoves,
+        totalGames,  // 総ゲーム数に変更
         totalSessions: Object.keys(sessionGroups).length,
         sessionDetails: sessionGroups
       }
@@ -543,49 +553,47 @@ export const getRankingData = async (type = 'sessions', limit = 10, dateRange = 
       userDataGroups[log.user_id].push(log)
     })
 
-    // 各ユーザーの初回クリアまでのセッション数を計算
+    // 各ユーザーの初回クリアまでのゲーム数を計算
     Object.keys(userDataGroups).forEach(userId => {
       const userLogs = userDataGroups[userId]
       
-      // セッション別にグループ化
-      const sessionGroups = {}
-      userLogs.forEach(log => {
-        if (!sessionGroups[log.session_number]) {
-          sessionGroups[log.session_number] = []
-        }
-        sessionGroups[log.session_number].push(log)
-      })
-
-      // 初回クリアセッションを探す
-      let firstClearSession = null
-      let firstClearTimestamp = null
+      // 時系列順にソート
+      userLogs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       
-      Object.keys(sessionGroups).sort((a, b) => a - b).forEach(sessionNum => {
-        const session = sessionGroups[sessionNum]
-        const isCompleted = session.some(log => log.game_completed === true && log.operation === 'ゲーム完了')
+      // ゲーム開始の回数をカウント
+      let gameStartCount = 0
+      let firstClearGameNumber = null
+      let firstClearTimestamp = null
+      let firstClearSessionNumber = null
+      let movesCount = null
+      
+      for (let i = 0; i < userLogs.length; i++) {
+        const log = userLogs[i]
         
-        if (!firstClearSession && isCompleted) {
-          firstClearSession = parseInt(sessionNum)
-          const gameCompletedLog = session.find(log => log.game_completed === true && log.operation === 'ゲーム完了')
-          firstClearTimestamp = gameCompletedLog ? gameCompletedLog.timestamp : null
+        // ゲーム開始をカウント
+        if (log.operation === 'ゲーム開始') {
+          gameStartCount++
         }
-      })
+        
+        // 初回クリアを検出
+        if (!firstClearGameNumber && log.operation === 'ゲーム完了' && log.game_completed === true) {
+          firstClearGameNumber = gameStartCount
+          firstClearTimestamp = log.timestamp
+          firstClearSessionNumber = log.session_number
+          movesCount = log.moves_count
+          break
+        }
+      }
 
       // 初回クリアした場合のみランキングに追加
-      // 日付範囲が指定されている場合は、その期間内に初回クリアしたユーザーのみ
-      if (firstClearSession && firstClearTimestamp) {
+      if (firstClearGameNumber && firstClearTimestamp) {
         // 日付範囲が指定されていない、またはクリア日時が範囲内の場合
         if (!dateRange || (new Date(firstClearTimestamp) >= new Date(dateRange.start) && new Date(firstClearTimestamp) <= new Date(dateRange.end))) {
-          // 初回クリアセッションの操作回数を取得
-          const firstClearSessionLogs = sessionGroups[firstClearSession]
-          const gameCompletedLog = firstClearSessionLogs.find(log => log.game_completed === true && log.operation === 'ゲーム完了')
-          const movesCount = gameCompletedLog ? gameCompletedLog.moves_count : null
-          
           userFirstClearSessions[userId] = {
             user_id: userId,
-            sessions_until_first_clear: firstClearSession,
+            games_until_first_clear: firstClearGameNumber,  // ゲーム数に変更
             timestamp: firstClearTimestamp,
-            session_number: firstClearSession,
+            session_number: firstClearSessionNumber,
             moves_count: movesCount
           }
         }
@@ -593,7 +601,7 @@ export const getRankingData = async (type = 'sessions', limit = 10, dateRange = 
     })
 
     const ranking = Object.values(userFirstClearSessions)
-      .sort((a, b) => a.sessions_until_first_clear - b.sessions_until_first_clear)
+      .sort((a, b) => a.games_until_first_clear - b.games_until_first_clear)
       .slice(0, limit)
 
     return {
