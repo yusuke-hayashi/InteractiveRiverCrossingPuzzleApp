@@ -239,28 +239,12 @@ function AnalyticsDashboard() {
           return;
         }
         
-        // 成功前の最後の失敗（ゲーム完了）を探す
-        let lastFailureIndex = -1;
-        for (let i = successIndex - 1; i >= 0; i--) {
-          if (result.data[i].operation === 'ゲーム完了' && result.data[i].game_completed === false) {
-            lastFailureIndex = i;
-            break;
-          }
-        }
-        
-        // 開始インデックスを決定（最後の失敗の次、またはセッション開始から）
+        // 成功前の最後のゲーム開始を探す（ゲーム開始ログがあるため、これが最も簡潔）
         let startIndex = 0;
-        if (lastFailureIndex !== -1) {
-          startIndex = lastFailureIndex + 1;
-        } else {
-          // 失敗がない場合は、最後のゲーム開始/リセット/セッション開始を探す
-          for (let i = successIndex - 1; i >= 0; i--) {
-            if (result.data[i].operation === 'ゲーム開始' || 
-                result.data[i].operation === 'リセット' || 
-                result.data[i].operation === 'セッション開始') {
-              startIndex = i;
-              break;
-            }
+        for (let i = successIndex - 1; i >= 0; i--) {
+          if (result.data[i].operation === 'ゲーム開始') {
+            startIndex = i;
+            break;
           }
         }
         

@@ -89,6 +89,18 @@ function App() {
         sessionStartTime.current = sessionResult.sessionStartTime;
         gameSessionId.current = crypto.randomUUID();
         console.log(`セッション ${newSessionNumber} を開始しました`);
+        
+        // ゲーム開始ログを記録
+        await createLogEntry(
+          1,
+          'ゲーム開始',
+          '新規ゲーム',
+          ['cat', 'rabbit', 'vegetable'],
+          [],
+          [],
+          0,
+          false
+        );
       } else {
         console.error('セッション開始失敗:', sessionResult.error);
       }
@@ -497,14 +509,34 @@ function App() {
 
   // リセット
   const resetGame = async () => {
-    // 現在のセッションが進行中の場合、中断状態に更新
-    if (currentSessionNumber.current) {
-      const endTime = new Date().toISOString();
-      await updateSessionStatus(userId, currentSessionNumber.current, 'abandoned', endTime);
-    }
+    // 現在の操作ログを保持
+    const currentOperationLog = gameState.operationLog;
     
-    // 新しいセッションを開始
-    await initializeNewSession(userId);
+    // リセットログを記録（現在のセッション内で続ける場合）
+    if (currentSessionNumber.current && !gameState.gameWon) {
+      await createLogEntry(
+        currentOperationLog.length + 1,
+        'リセット',
+        'ゲームリセット',
+        ['cat', 'rabbit', 'vegetable'],
+        [],
+        [],
+        0,
+        false
+      );
+      
+      // ゲーム開始ログを記録
+      await createLogEntry(
+        currentOperationLog.length + 2,
+        'ゲーム開始',
+        'リセット後',
+        ['cat', 'rabbit', 'vegetable'],
+        [],
+        [],
+        0,
+        false
+      );
+    }
     
     setGameState({
       leftSide: ['cat', 'rabbit', 'vegetable'],
@@ -515,7 +547,7 @@ function App() {
       gameWon: false,
       error: '',
       warning: '',
-      operationLog: [],
+      operationLog: currentOperationLog,
       showCSV: false
     });
   };
