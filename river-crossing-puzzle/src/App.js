@@ -90,7 +90,7 @@ function App() {
         gameSessionId.current = crypto.randomUUID();
         console.log(`セッション ${newSessionNumber} を開始しました`);
         
-        // ゲーム開始ログを記録
+        // ゲーム開始ログを記録（userIdを明示的に渡す）
         await createLogEntry(
           1,
           'ゲーム開始',
@@ -99,7 +99,8 @@ function App() {
           [],
           [],
           0,
-          false
+          false,
+          userId
         );
       } else {
         console.error('セッション開始失敗:', sessionResult.error);
@@ -110,10 +111,10 @@ function App() {
   };
 
   // ログエントリを作成し、Supabaseに保存するヘルパー関数
-  const createLogEntry = async (operationNum, operation, target, leftSide, rightSide, boat, moves = 0, gameCompleted = false) => {
+  const createLogEntry = async (operationNum, operation, target, leftSide, rightSide, boat, moves = 0, gameCompleted = false, specificUserId = null) => {
     const timestamp = new Date().toISOString();
     const logEntry = {
-      ユーザーID: userId,
+      ユーザーID: specificUserId || userId,
       タイムスタンプ: timestamp,
       操作番号: operationNum,
       操作: operation,
