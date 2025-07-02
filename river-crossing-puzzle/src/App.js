@@ -3,7 +3,8 @@ import {
   saveGameLog, 
   getLatestSessionNumber, 
   startNewSession, 
-  updateSessionStatus 
+  updateSessionStatus,
+  saveUserProfile
 } from './supabaseClient';
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
   const [userId, setUserId] = useState('');
   const [showUserIdModal, setShowUserIdModal] = useState(true);
   const [tempUserId, setTempUserId] = useState('');
+  const [tempNickname, setTempNickname] = useState('');
   
   // ゲームセッションID（ゲーム開始時に生成）
   const gameSessionId = useRef(null);
@@ -43,7 +45,21 @@ function App() {
   // ユーザーID入力処理
   const handleUserIdSubmit = async () => {
     const trimmedId = tempUserId.trim();
+    const trimmedNickname = tempNickname.trim();
+    
     if (trimmedId) {
+      // ニックネームが入力されていればプロフィールを保存
+      if (trimmedNickname) {
+        try {
+          const result = await saveUserProfile(trimmedId, trimmedNickname);
+          if (!result.success) {
+            console.error('ニックネーム保存失敗:', result.error);
+          }
+        } catch (error) {
+          console.error('ニックネーム保存中にエラー:', error);
+        }
+      }
+      
       setUserId(trimmedId);
       setShowUserIdModal(false);
       
@@ -73,6 +89,25 @@ function App() {
         sessionStartTime.current = sessionResult.sessionStartTime;
         gameSessionId.current = crypto.randomUUID();
         console.log(`セッション ${newSessionNumber} を開始しました`);
+        
+        // ゲーム開始ログを記録（userIdを明示的に渡す）
+        const startLogEntry = await createLogEntry(
+          1,
+          'ゲーム開始',
+          '新規ゲーム',
+          ['cat', 'rabbit', 'vegetable'],
+          [],
+          [],
+          0,
+          false,
+          userId
+        );
+        
+        // 操作ログ配列に追加
+        setGameState(prev => ({
+          ...prev,
+          operationLog: [startLogEntry]
+        }));
       } else {
         console.error('セッション開始失敗:', sessionResult.error);
       }
@@ -82,10 +117,10 @@ function App() {
   };
 
   // ログエントリを作成し、Supabaseに保存するヘルパー関数
-  const createLogEntry = async (operationNum, operation, target, leftSide, rightSide, boat, moves = 0, gameCompleted = false) => {
+  const createLogEntry = async (operationNum, operation, target, leftSide, rightSide, boat, moves = 0, gameCompleted = false, specificUserId = null) => {
     const timestamp = new Date().toISOString();
     const logEntry = {
-      ユーザーID: userId,
+      ユーザーID: specificUserId || userId,
       タイムスタンプ: timestamp,
       操作番号: operationNum,
       操作: operation,
@@ -259,6 +294,40 @@ function App() {
     return null;
   };
 
+  // 船からアイテムを降ろす
+  const removeFromBoat = async (item) => {
+    if (gameState.error || gameState.gameWon) return;
+    
+    // 船から降ろす
+    const newBoat = gameState.boat.filter(i => i !== item);
+    const targetSide = gameState.boatSide === 'left' ? 'leftSide' : 'rightSide';
+    const newTargetSide = [...gameState[targetSide], item];
+    
+    const newState = {
+      ...gameState,
+      boat: newBoat,
+      [targetSide]: newTargetSide,
+      warning: '' // 警告をクリア
+    };
+    
+    // ログ記録
+    const logEntry = await createLogEntry(
+      gameState.operationLog.length + 1,
+      '降ろす',
+      items[item]?.name,
+      newState.leftSide,
+      newState.rightSide,
+      newState.boat,
+      newState.moves,
+      false
+    );
+    
+    setGameState({
+      ...newState,
+      operationLog: [...newState.operationLog, logEntry]
+    });
+  };
+
   // アイテムを船に乗せる/降ろす
   const toggleItem = async (item) => {
     if (gameState.gameWon || gameState.error) return;
@@ -266,18 +335,6 @@ function App() {
 
     const newState = { ...gameState, error: '', warning: '' };
     
-    // 船がいる側からのみ乗船可能
-    const currentSide = newState.boatSide === 'left' ? newState.leftSide : newState.rightSide;
-    if (!currentSide.includes(item)) {
-      newState.warning = '船がいる側からしか乗船できません！';
-      setGameState(newState);
-      // 2秒後に警告を消す
-      setTimeout(() => {
-        setGameState(prev => ({ ...prev, warning: '' }));
-      }, 2000);
-      return;
-    }
-
     let operation = '';
     let operationTarget = items[item]?.name;
 
@@ -285,11 +342,35 @@ function App() {
       // 船から降ろす
       operation = '降ろす';
       newState.boat = newState.boat.filter(i => i !== item);
+      
+      // 船がいる側に戻す
+      if (newState.boatSide === 'left') {
+        if (!newState.leftSide.includes(item)) {
+          newState.leftSide.push(item);
+        }
+      } else {
+        if (!newState.rightSide.includes(item)) {
+          newState.rightSide.push(item);
+        }
+      }
+      
       // アイテムを降ろす時、船頭以外に誰もいなければ船頭も降ろす
       if (newState.boat.filter(i => i !== 'farmer').length === 0) {
         newState.boat = newState.boat.filter(i => i !== 'farmer');
       }
     } else {
+      // 船がいる側からのみ乗船可能チェック
+      const currentSide = newState.boatSide === 'left' ? newState.leftSide : newState.rightSide;
+      if (!currentSide.includes(item)) {
+        newState.warning = '船がいる側からしか乗船できません！';
+        setGameState(newState);
+        // 2秒後に警告を消す
+        setTimeout(() => {
+          setGameState(prev => ({ ...prev, warning: '' }));
+        }, 2000);
+        return;
+      }
+      
       // 船に乗せる
       const nonFarmerItems = newState.boat.filter(i => i !== 'farmer');
       if (nonFarmerItems.length >= 1) {
@@ -303,6 +384,14 @@ function App() {
       }
       
       operation = '乗せる';
+      
+      // 岸からアイテムを削除
+      if (newState.boatSide === 'left') {
+        newState.leftSide = newState.leftSide.filter(i => i !== item);
+      } else {
+        newState.rightSide = newState.rightSide.filter(i => i !== item);
+      }
+      
       // アイテムを船に乗せる時、船頭も自動的に乗せる
       if (!newState.boat.includes('farmer')) {
         newState.boat.push('farmer');
@@ -332,17 +421,17 @@ function App() {
     const newState = { ...gameState, error: '', warning: '', moves: gameState.moves + 1 };
     
     // 船の乗客を対岸に移動（船頭以外）
-    gameState.boat.filter(item => item !== 'farmer').forEach(item => {
+    const passengersToMove = gameState.boat.filter(item => item !== 'farmer');
+    
+    passengersToMove.forEach(item => {
       if (newState.boatSide === 'left') {
+        // 左岸から右岸へ移動
         newState.leftSide = newState.leftSide.filter(i => i !== item);
-        if (!newState.rightSide.includes(item)) {
-          newState.rightSide.push(item);
-        }
+        newState.rightSide.push(item);
       } else {
+        // 右岸から左岸へ移動
         newState.rightSide = newState.rightSide.filter(i => i !== item);
-        if (!newState.leftSide.includes(item)) {
-          newState.leftSide.push(item);
-        }
+        newState.leftSide.push(item);
       }
     });
 
@@ -369,6 +458,30 @@ function App() {
     
     if (leftError || rightError) {
       const errorMessage = leftError || rightError;
+      
+      // 制約違反の内容を分類
+      let violationType = '';
+      if (errorMessage.includes('ネコとウサギ')) {
+        violationType = '制約違反：ネコとウサギ';
+      } else if (errorMessage.includes('ウサギと野菜')) {
+        violationType = '制約違反：ウサギと野菜';
+      } else {
+        violationType = '制約違反：その他';
+      }
+      
+      // 制約違反ログを記録（operationを「ゲーム完了」、targetに違反内容）
+      const violationLogEntry = await createLogEntry(
+        newState.moves + 1,
+        'ゲーム完了',
+        violationType,
+        newState.leftSide,
+        newState.rightSide,
+        newState.boat,
+        newState.moves,
+        false
+      );
+      newState.operationLog = [...newState.operationLog, violationLogEntry];
+      
       // セッションを失敗状態に更新
       const endTime = new Date().toISOString();
       await updateSessionStatus(userId, currentSessionNumber.current, 'failed', endTime);
@@ -403,14 +516,36 @@ function App() {
 
   // リセット
   const resetGame = async () => {
-    // 現在のセッションが進行中の場合、中断状態に更新
-    if (currentSessionNumber.current) {
-      const endTime = new Date().toISOString();
-      await updateSessionStatus(userId, currentSessionNumber.current, 'abandoned', endTime);
-    }
+    // 現在の操作ログを保持
+    const currentOperationLog = gameState.operationLog;
     
-    // 新しいセッションを開始
-    await initializeNewSession(userId);
+    // リセットログを記録（現在のセッション内で続ける場合）
+    if (currentSessionNumber.current && !gameState.gameWon) {
+      const resetLogEntry = await createLogEntry(
+        currentOperationLog.length + 1,
+        'リセット',
+        'ゲームリセット',
+        ['cat', 'rabbit', 'vegetable'],
+        [],
+        [],
+        0,
+        false
+      );
+      currentOperationLog.push(resetLogEntry);
+      
+      // ゲーム開始ログを記録
+      const startLogEntry = await createLogEntry(
+        currentOperationLog.length + 1,
+        'ゲーム開始',
+        'リセット後',
+        ['cat', 'rabbit', 'vegetable'],
+        [],
+        [],
+        0,
+        false
+      );
+      currentOperationLog.push(startLogEntry);
+    }
     
     setGameState({
       leftSide: ['cat', 'rabbit', 'vegetable'],
@@ -421,7 +556,7 @@ function App() {
       gameWon: false,
       error: '',
       warning: '',
-      operationLog: [],
+      operationLog: currentOperationLog,
       showCSV: false
     });
   };
@@ -462,15 +597,34 @@ function App() {
             marginBottom: '24px',
             color: '#6b7280'
           }}>
-            ゲーム開始前にユーザーIDを入力してください。<br/>
+            ゲーム開始前にユーザーIDとニックネーム（任意）を入力してください。<br/>
             操作ログにユーザー情報が記録されます。
           </p>
           <input
             type="text"
             value={tempUserId}
             onChange={(e) => setTempUserId(e.target.value)}
-            placeholder="ユーザーIDを入力"
+            placeholder="ユーザーIDを入力（必須）"
             onKeyDown={(e) => e.key === 'Enter' && handleUserIdSubmit()}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              fontSize: '16px',
+              border: '2px solid #d1d5db',
+              borderRadius: '8px',
+              marginBottom: '12px',
+              outline: 'none',
+              boxSizing: 'border-box'
+            }}
+            autoFocus
+          />
+          <input
+            type="text"
+            value={tempNickname}
+            onChange={(e) => setTempNickname(e.target.value)}
+            placeholder="ニックネームを入力（任意・20文字以内）"
+            onKeyDown={(e) => e.key === 'Enter' && handleUserIdSubmit()}
+            maxLength={20}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -481,7 +635,6 @@ function App() {
               outline: 'none',
               boxSizing: 'border-box'
             }}
-            autoFocus
           />
           <button
             onClick={handleUserIdSubmit}
@@ -738,9 +891,26 @@ function App() {
               <span style={{ fontSize: '20px' }}>{items.farmer.emoji}</span>
               <div style={{ display: 'flex', gap: '4px' }}>
                 {gameState.boat.filter(item => item !== 'farmer').map((item, index) => (
-                  <span key={index} style={{ fontSize: '20px' }}>
+                  <button
+                    key={index}
+                    onClick={() => removeFromBoat(item)}
+                    disabled={gameState.error || gameState.gameWon}
+                    style={{
+                      fontSize: '20px',
+                      padding: '4px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: gameState.error || gameState.gameWon ? 'not-allowed' : 'pointer',
+                      opacity: gameState.error || gameState.gameWon ? 0.5 : 1,
+                      transition: 'transform 0.2s',
+                    }}
+                    onMouseEnter={(e) => !gameState.error && !gameState.gameWon && (e.target.style.transform = 'scale(1.2)')}
+                    onMouseLeave={(e) => (e.target.style.transform = 'scale(1)')}
+                    title={`${items[item]?.name}を降ろす`}
+                  >
                     {items[item].emoji}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -878,6 +1048,21 @@ function App() {
             ).length}件記録中
           </p>
         )}
+        <div style={{ marginTop: '16px', textAlign: 'center' }}>
+          <button
+            onClick={() => window.location.href = '/admin/login'}
+            style={{
+              color: '#6b7280',
+              fontSize: '12px',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              textDecoration: 'underline'
+            }}
+          >
+            📊 管理者分析ページ
+          </button>
+        </div>
       </div>
 
       {/* CSVモーダル */}
