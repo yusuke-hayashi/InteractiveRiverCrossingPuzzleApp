@@ -228,68 +228,47 @@ function AnalyticsDashboard() {
     try {
       const result = await getSessionDetails(user.user_id, user.session_number);
       if (result.success && result.data) {
-        // ゲーム完了のインデックスを見つける
-        const gameCompletedIndex = result.data.findIndex(log => 
+        // 成功したゲーム完了のインデックスを見つける
+        const successIndex = result.data.findIndex(log => 
           log.operation === 'ゲーム完了' && log.game_completed === true
         );
         
-        if (gameCompletedIndex === -1) {
+        if (successIndex === -1) {
           // ゲーム完了が見つからない場合は空配列
           setSessionDetails([]);
           return;
         }
         
-        // ゲーム完了から逆順に探索して、直前のゲーム開始/リセット/実際の操作開始を見つける
-        let gameStartIndex = 0;
-        for (let i = gameCompletedIndex - 1; i >= 0; i--) {
-          const log = result.data[i];
-          
-          // 実際のゲーム操作（乗せる、移動など）または制約違反による完了が見つかったら、
-          // その前のゲーム開始/リセットまたは最初まで遡る
-          if (log.operation === '乗せる' || log.operation === '移動' || log.operation === '降ろす' ||
-              (log.operation === 'ゲーム完了' && log.game_completed === false)) {
-            // さらに遡ってゲーム開始またはリセットを探す
-            for (let j = i - 1; j >= 0; j--) {
-              if (result.data[j].operation === 'ゲーム開始' || result.data[j].operation === 'リセット') {
-                gameStartIndex = j;
-                break;
-              }
+        // 成功前の最後の失敗（ゲーム完了）を探す
+        let lastFailureIndex = -1;
+        for (let i = successIndex - 1; i >= 0; i--) {
+          if (result.data[i].operation === 'ゲーム完了' && result.data[i].game_completed === false) {
+            lastFailureIndex = i;
+            break;
+          }
+        }
+        
+        // 開始インデックスを決定（最後の失敗の次、またはセッション開始から）
+        let startIndex = 0;
+        if (lastFailureIndex !== -1) {
+          startIndex = lastFailureIndex + 1;
+        } else {
+          // 失敗がない場合は、最後のゲーム開始/リセット/セッション開始を探す
+          for (let i = successIndex - 1; i >= 0; i--) {
+            if (result.data[i].operation === 'ゲーム開始' || 
+                result.data[i].operation === 'リセット' || 
+                result.data[i].operation === 'セッション開始') {
+              startIndex = i;
+              break;
             }
-            break;
-          }
-          
-          // ゲーム開始またはリセットが見つかった場合
-          if (log.operation === 'ゲーム開始' || log.operation === 'リセット') {
-            gameStartIndex = i;
-            break;
           }
         }
         
-        // ゲーム開始から完了までのデータを抽出
-        const filteredData = result.data.slice(gameStartIndex, gameCompletedIndex + 1);
-        
-        // セッション開始の重複を除去（最後の1つだけを残す）
-        const cleanedData = [];
-        let lastSessionStartIndex = -1;
-        
-        // セッション開始の最後のインデックスを見つける
-        for (let i = 0; i < filteredData.length; i++) {
-          if (filteredData[i].operation === 'セッション開始') {
-            lastSessionStartIndex = i;
-          }
-        }
-        
-        // データをクリーンアップ
-        for (let i = 0; i < filteredData.length; i++) {
-          // セッション開始は最後の1つだけ含める
-          if (filteredData[i].operation === 'セッション開始' && i < lastSessionStartIndex) {
-            continue;
-          }
-          cleanedData.push(filteredData[i]);
-        }
+        // 開始から成功までのデータを抽出
+        const filteredData = result.data.slice(startIndex, successIndex + 1);
         
         // 操作番号を1から振り直す
-        const renumberedData = cleanedData.map((log, index) => ({
+        const renumberedData = filteredData.map((log, index) => ({
           ...log,
           operation_number: index + 1
         }));
@@ -1174,12 +1153,21 @@ function AnalyticsDashboard() {
                       {sessionDetails.map((log, index) => {
                         const leftItems = [];
                         const rightItems = [];
+                        const boatItems = [];
+                        
                         if (log.left_cat > 0) leftItems.push('🐈');
                         if (log.left_rabbit > 0) leftItems.push('🐰');
                         if (log.left_vegetable > 0) leftItems.push('🥬');
                         if (log.right_cat > 0) rightItems.push('🐈');
                         if (log.right_rabbit > 0) rightItems.push('🐰');
                         if (log.right_vegetable > 0) rightItems.push('🥬');
+                        
+                        // 船の中身をアイコンで表示
+                        if (log.boat_cargo && log.boat_cargo !== 'なし') {
+                          if (log.boat_cargo.includes('ネコ')) boatItems.push('🐈');
+                          if (log.boat_cargo.includes('ウサギ')) boatItems.push('🐰');
+                          if (log.boat_cargo.includes('野菜')) boatItems.push('🥬');
+                        }
                         
                         return (
                           <tr key={index} style={{
@@ -1190,7 +1178,7 @@ function AnalyticsDashboard() {
                             <td style={{ padding: '12px' }}>{log.operation}</td>
                             <td style={{ padding: '12px' }}>{log.target || '-'}</td>
                             <td style={{ padding: '12px' }}>{leftItems.join(' ') || 'なし'}</td>
-                            <td style={{ padding: '12px' }}>{log.boat_cargo || 'なし'}</td>
+                            <td style={{ padding: '12px' }}>{boatItems.join(' ') || 'なし'}</td>
                             <td style={{ padding: '12px' }}>{rightItems.join(' ') || 'なし'}</td>
                           </tr>
                         );
